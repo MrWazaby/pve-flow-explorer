@@ -21,7 +21,15 @@ python3 pve_fw_export.py --live
 # Bundle written: /root/pve-fw-<cluster>-<date>.json
 ```
 
-Then open https://pxe-fw-audit.w00tw00t.me and click **Import bundle…**. You can also drag and drop the file onto the page, or paste its JSON content.
+Then open https://pxe-fw-audit.w00tw00t.me and click **Import bundle…**. The import dialog repeats these steps, with copy buttons, and lets you choose the file, drop it, or paste its JSON content into a text box.
+
+To paste instead of copying the file around, print the bundle and copy it from your terminal:
+
+```bash
+python3 pve_fw_export.py --live -o -
+```
+
+The paste box tolerates the command line and shell prompt around the JSON. If your terminal hard-wraps long lines when copying, import the file instead.
 
 Python 3.6+ with the standard library only. Nothing to install.
 
@@ -37,6 +45,12 @@ usage: pve_fw_export.py [--pve-dir DIR] [-o FILE] [--live]
   --pve-dir DIR   PVE config root (default: /etc/pve). Use it on an offline copy.
   -o FILE         output file, '-' for stdout (default: ./pve-fw-<cluster>-<date>.json)
   --live          add power state and real IP addresses via pvesh / qemu-guest-agent
+```
+
+To run it from your workstation without copying the script to the node, pipe it through SSH:
+
+```bash
+ssh root@pve1 python3 - --live -o - < pve_fw_export.py > pve-fw-export.json
 ```
 
 ### What goes into the bundle

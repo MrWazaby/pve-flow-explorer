@@ -179,6 +179,50 @@ td.cm{white-space:normal;min-width:160px;color:var(--mut)}
 .arrow{color:var(--faint)}
 
 .dropzone{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 82%,transparent);border:3px dashed var(--accent);font-size:18px;font-weight:500;color:var(--accent)}
+.callout{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:7px;background:var(--soft);padding:10px 12px;font-size:13px}
+.callout code{font-family:var(--mono);font-size:12px}
+.callout .row-btns{margin-top:8px}
+
+/* import dialog */
+dialog.dlg{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);padding:0;overflow:auto;
+  width:min(660px,calc(100vw - 32px));max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);box-shadow:0 18px 48px rgb(0 0 0 / .28)}
+dialog.dlg::backdrop{background:rgb(8 12 18 / .5)}
+.dlg-h{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+.dlg-h h2{margin:0;font-size:16px;font-weight:600}
+.dlg-x{border:0;background:none;color:var(--mut);font-size:22px;line-height:1;padding:2px 7px;border-radius:5px;cursor:pointer}
+.dlg-x:hover{color:var(--ink);background:var(--soft)}
+.dlg-b{padding:16px 18px 18px;display:flex;flex-direction:column;gap:20px}
+.step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:0 12px}
+.step .n{width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600}
+.step h3{margin:2px 0 6px;font-size:14px;font-weight:600}
+.step p{margin:0 0 8px;font-size:13px;color:var(--mut)}
+.step p.fine{font-size:12px;margin:10px 0 0}
+.dlg code{font-family:var(--mono);font-size:12px;background:var(--soft);border-radius:3px;padding:0 4px;overflow-wrap:anywhere;color:var(--ink)}
+.dlg kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--soft)}
+.dlg a{color:var(--accent)}
+/* long commands wrap on screen only: Copy and manual selection both give the exact single-line text */
+.code{display:flex;align-items:flex-start;gap:8px;margin:0 0 8px;background:var(--soft);border:1px solid var(--line);border-radius:7px;padding:5px 5px 5px 11px}
+.code pre{flex:1;min-width:0;margin:0;padding:3px 0;font-family:var(--mono);font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.code .cp{flex:none}
+.dlg details{font-size:13px;color:var(--mut);border:1px solid var(--line);border-radius:7px;padding:0 11px}
+.dlg details[open]{padding-bottom:4px}
+.dlg summary{cursor:pointer;color:var(--ink);font-weight:500;padding:7px 0}
+.dlg details dl{margin:4px 0 0}
+.dlg details dt{color:var(--ink);margin-top:8px}
+.dlg details dd{margin:4px 0 0}
+.dlg details dd .code{margin:0}
+.dropin{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1.5px dashed var(--line);border-radius:8px;padding:12px;font-size:13px;color:var(--mut);transition:border-color .12s,background .12s}
+.dropin.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent)}
+.or{display:flex;align-items:center;gap:10px;margin:14px 0 8px;font-size:11.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.07em}
+.or::before,.or::after{content:"";flex:1;border-top:1px solid var(--line)}
+textarea.paste{display:block;width:100%;box-sizing:border-box;height:140px;resize:vertical;font-family:var(--mono);font-size:11.5px;line-height:1.5;background:var(--soft);border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:8px 10px}
+textarea.paste:focus{border-color:var(--accent);outline:0}
+textarea.paste.bad{border-color:var(--deny)}
+.paste-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.paste-row .hint{font-size:12px}
+.dlg .err{margin:8px 0 0;font-size:12.5px;color:var(--deny);background:var(--deny-bg);border-radius:6px;padding:7px 10px}
+.dlg-f{display:flex;gap:9px;align-items:flex-start;padding:11px 18px;border-top:1px solid var(--line);background:var(--soft);font-size:12px;color:var(--mut)}
+.dlg-f svg{flex:none;margin-top:1px}
 
 @media (max-width:900px){
   html,body{height:auto}
@@ -274,6 +318,60 @@ td.cm{white-space:normal;min-width:160px;color:var(--mut)}
   </section>
 </div>
 <div class="dropzone" id="drop" hidden>Drop the JSON bundle (or .fw files)</div>
+
+<dialog class="dlg" id="dlgImport" aria-labelledby="dlgTitle">
+  <div class="dlg-h">
+    <h2 id="dlgTitle">Import a firewall bundle</h2>
+    <button type="button" class="dlg-x" data-act="close-import" aria-label="Close">×</button>
+  </div>
+  <div class="dlg-b">
+    <section class="step">
+      <span class="n" aria-hidden="true">1</span>
+      <div>
+        <h3>Export the configuration on a PVE node</h3>
+        <p>Run this on any node of the cluster, as root. It only needs Python 3.6+, nothing to install.</p>
+        <div class="code"><pre id="cmdExport">curl -fsSLO https://raw.githubusercontent.com/mrwazaby/pxe-fw-audit/main/pve_fw_export.py
+python3 pve_fw_export.py --live</pre><button type="button" class="btn small cp" data-copy="cmdExport">Copy</button></div>
+        <p>It writes <code>pve-fw-&lt;cluster&gt;-&lt;date&gt;.json</code> in the current directory. <code>--live</code> adds power states and the IPs reported by the QEMU guest agent, so rules written with bare IPs point to the right VM. Copy the file to your computer, for example with <code>scp root@pve1:pve-fw-*.json .</code></p>
+        <details>
+          <summary>Other ways to get the export</summary>
+          <dl>
+            <dt>Print the JSON, then copy it from the terminal and paste it below</dt>
+            <dd><div class="code"><pre id="cmdStdout">python3 pve_fw_export.py --live -o -</pre><button type="button" class="btn small cp" data-copy="cmdStdout">Copy</button></div></dd>
+            <dt>Run it from your computer, without copying the script to the node</dt>
+            <dd><div class="code"><pre id="cmdSsh">ssh root@pve1 python3 - --live -o - &lt; pve_fw_export.py &gt; pve-fw-export.json</pre><button type="button" class="btn small cp" data-copy="cmdSsh">Copy</button></div></dd>
+            <dt>Read an offline copy of <code>/etc/pve</code></dt>
+            <dd><div class="code"><pre id="cmdOffline">python3 pve_fw_export.py --pve-dir ./etc-pve</pre><button type="button" class="btn small cp" data-copy="cmdOffline">Copy</button></div></dd>
+            <dt>Only have <code>.fw</code> files?</dt>
+            <dd>Drop them below. The rules are shown, but IP addresses are not mapped to guests.</dd>
+          </dl>
+        </details>
+        <p class="fine">The bundle holds the firewall and SDN files, plus the <code>name</code>, <code>net*</code>, <code>ipconfig*</code> and <code>tags</code> lines of each guest config. No passwords, SSH keys, disks or users. <a href="https://github.com/mrwazaby/pxe-fw-audit#what-goes-into-the-bundle" target="_blank" rel="noopener">What goes into the bundle</a></p>
+      </div>
+    </section>
+    <section class="step">
+      <span class="n" aria-hidden="true">2</span>
+      <div>
+        <h3>Load it here</h3>
+        <div class="dropin" id="dlgDrop">
+          <button type="button" class="btn primary" id="dlgFile">Choose file…</button>
+          <span>or drop the <code>.json</code> bundle (or <code>.fw</code> files) here</span>
+        </div>
+        <div class="or">or paste the JSON</div>
+        <textarea class="paste" id="pasteBox" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Bundle JSON" aria-describedby="dlgErr" placeholder='{ "format": "pve-fw-raw", "version": 1, "meta": { … }, "files": { … } }'></textarea>
+        <div class="paste-row">
+          <button type="button" class="btn primary" id="btnPaste">Load pasted JSON</button>
+          <span class="hint">or <kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
+        </div>
+        <p class="err" id="dlgErr" role="alert" hidden></p>
+      </div>
+    </section>
+  </div>
+  <div class="dlg-f">
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.3a2.5 2.5 0 0 1 5 0V6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+    <span>The bundle is read in your browser and never uploaded. The last import is kept in this browser's local storage so it reloads with the page.</span>
+  </div>
+</dialog>
 
 <script>
 "use strict";
@@ -847,6 +945,8 @@ function renderSide(){
     const guestsFw = Object.keys(M.guests).length - M.noFw.length;
     side.innerHTML = `
       <div><div class="eyebrow">Overview</div><h2>${esc((M.bundle.meta || {}).cluster || "Imported bundle")}</h2></div>
+      ${S.isDemo ? `<div class="callout"><b>This is sample data.</b> To audit your own cluster, run <code>pve_fw_export.py</code> on a PVE node, then import the JSON it writes: choose the file, drop it here or paste it.
+        <div class="row-btns"><button class="btn small primary" type="button" data-act="import">How to export &amp; import</button></div></div>` : ""}
       <div class="stats">
         <div class="stat allow"><b>${a}</b><span>allow rules</span></div>
         <div class="stat deny"><b>${d}</b><span>block rules</span></div>
@@ -963,10 +1063,11 @@ function refresh(keepView){
   S.layoutKey = key;
   renderSide(); renderTable();
 }
+// Returns "" on success, or an error message (the current view is left untouched).
 function loadBundle(bundle, opts = {}){
   try {
     M = buildModel(bundle);
-  } catch (err) { showBanner("Cannot read this bundle: " + err.message); return false; }
+  } catch (err) { return "Cannot read this bundle: " + err.message; }
   S.isDemo = !!opts.demo; S.sel = null;
   const meta = bundle.meta || {};
   const nFw = Object.keys(bundle.files || {}).filter(k => k.endsWith(".fw")).length;
@@ -976,22 +1077,41 @@ function loadBundle(bundle, opts = {}){
   S.node = "";
   hideBanner();
   refresh(false);
-  return true;
+  return "";
 }
 function showBanner(t, info){ const b = $("#banner"); b.textContent = t; b.className = "banner" + (info ? " info" : ""); b.hidden = false; }
 function hideBanner(){ $("#banner").hidden = true; }
 
 /* ------------------------------------------------------------------ import */
+// Every import returns "" on success or an error message; runImport() shows it in the dialog or the banner.
+function parseBundleText(text, label){
+  const t = String(text || "").replace(/^﻿/, "").trim();
+  if (!t) return { err:"Nothing to import yet: paste the JSON printed by pve_fw_export.py." };
+  let b;
+  try { b = JSON.parse(t); }
+  catch (e) {
+    // text copied from a terminal often carries the command line before it or the shell prompt after it
+    const i = t.indexOf("{"), j = t.lastIndexOf("}");
+    try { if (i < 0 || j <= i) throw e; b = JSON.parse(t.slice(i, j + 1)); }
+    catch (e2) {
+      const wrapped = /control character/i.test(e2.message) ? " Your terminal probably wrapped long lines when copying: import the file instead." : " Copy the whole output, from the first { to the last }.";
+      return { err:`${label} is not valid JSON (${e2.message}).${wrapped}` };
+    }
+  }
+  if (!b || typeof b !== "object" || Array.isArray(b) || !b.files || typeof b.files !== "object")
+    return { err:`${label} is not a pve_fw_export.py bundle: it has no "files" key.` };
+  return { b };
+}
+function importText(text, label, name){
+  const r = parseBundleText(text, label); if (r.err) return r.err;
+  const err = loadBundle(r.b, { name }); if (!err) persist(r.b);
+  return err;
+}
 async function importFiles(fileList){
-  const files = [...fileList]; if (!files.length) return;
+  const files = [...fileList]; if (!files.length) return "";
   const texts = await Promise.all(files.map(f => f.text().then(t => ({ name:f.name, text:t }))));
   const json = texts.find(t => /\.json$/i.test(t.name) || t.text.trim().startsWith("{"));
-  if (json) {
-    let b; try { b = JSON.parse(json.text); } catch (e) { showBanner(`"${json.name}" is not valid JSON: ${e.message}`); return; }
-    if (!b.files || typeof b.files !== "object") { showBanner(`"${json.name}" is not a pve_fw_export.py bundle (no "files" key).`); return; }
-    if (loadBundle(b, { name:json.name })) persist(b);
-    return;
-  }
+  if (json) return importText(json.text, `"${json.name}"`, json.name);
   // raw .fw files dropped directly
   const b = { format:"pve-fw-raw", version:1, meta:{ cluster:"imported .fw files", generated:new Date().toISOString() }, nodes:[], files:{}, guests:{} };
   texts.forEach(t => {
@@ -1001,17 +1121,36 @@ async function importFiles(fileList){
     else if (/^host\.fw$/i.test(n)) b.files["nodes/host/host.fw"] = t.text;
     else if (/\.fw$/i.test(n)) b.files["nodes/" + n.replace(/\.fw$/i, "") + "/host.fw"] = t.text;
   });
-  if (!Object.keys(b.files).length) { showBanner("No recognised file. Import the JSON bundle produced by pve_fw_export.py, or .fw files."); return; }
-  loadBundle(b, { name:".fw files" });
+  if (!Object.keys(b.files).length) return "No recognised file. Import the JSON bundle produced by pve_fw_export.py, or .fw files.";
+  const err = loadBundle(b, { name:".fw files" }); if (err) return err;
   showBanner(".fw files imported without guest configs: IP addresses are not mapped to VMs. Use the JSON bundle for the full picture.", true);
+  return "";
 }
 function persist(b){ try { const s = JSON.stringify(b); if (s.length < 4.5e6) localStorage.setItem("pvefe.bundle", s); } catch (e) {} }
 function restore(){ try { const s = localStorage.getItem("pvefe.bundle"); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
 
+/* import dialog: how to export, choose or drop a file, or paste the JSON */
+const dlg = $("#dlgImport"), pasteBox = $("#pasteBox");
+function dlgError(msg, fromPaste){ const p = $("#dlgErr"); p.textContent = msg || ""; p.hidden = !msg; pasteBox.classList.toggle("bad", !!msg && !!fromPaste); }
+function openImport(){ dlgError(""); if (!dlg.open) dlg.showModal(); }
+function closeImport(){ if (dlg.open) dlg.close(); }
+async function runImport(job, fromPaste){
+  let err;
+  try { err = await job; } catch (e) { err = "Import failed: " + e.message; }
+  if (err) { if (dlg.open) dlgError(err, fromPaste); else showBanner(err); return; }
+  pasteBox.value = ""; dlgError(""); closeImport();
+}
+const loadPasted = () => runImport(importText(pasteBox.value, "The pasted text", "pasted"), true);
+
 /* ------------------------------------------------------------------ events */
 function addChip(text){ text.split(/\s+/).filter(Boolean).forEach(t => S.chips.push(toChip(t))); renderChips(); refresh(true); }
-$("#btnImport").onclick = () => $("#file").click();
-$("#file").onchange = e => { importFiles(e.target.files); e.target.value = ""; };
+$("#btnImport").onclick = openImport;
+$("#dlgFile").onclick = () => $("#file").click();
+$("#file").onchange = e => { runImport(importFiles(e.target.files)); e.target.value = ""; };
+$("#btnPaste").onclick = loadPasted;
+pasteBox.addEventListener("input", () => { if (!$("#dlgErr").hidden) dlgError(""); });
+pasteBox.addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); loadPasted(); } });
+dlg.addEventListener("click", e => { if (e.target === dlg) closeImport(); });   // click on the backdrop
 $("#btnDemo").onclick = () => { if (DEMO) loadBundle(DEMO, { demo:true }); };
 $("#tokbox").onclick = e => { const rm = e.target.closest("[data-rm]"); if (rm) { S.chips.splice(+rm.dataset.rm, 1); renderChips(); refresh(true); return; } $("#q").focus(); };
 let qTimer;
@@ -1054,11 +1193,22 @@ document.addEventListener("click", e => {
   const fl = e.target.closest("[data-flow]"); if (fl && !e.target.closest("#map")) { setSel({ t:"f", id:+fl.dataset.flow }); return; }
   const c = e.target.closest("[data-chip]"); if (c) { addChip(c.dataset.chip.replace(/\s+/g, "_").replace(/^(\w+):_?/, "$1:")); return; }
   const a = e.target.closest("[data-act='clear']"); if (a) { setSel(null); return; }
+  if (e.target.closest("[data-act='import']")) { openImport(); return; }
+  if (e.target.closest("[data-act='close-import']")) { closeImport(); return; }
+  const cp = e.target.closest("[data-copy]"); if (cp) { copyCode(cp); return; }
 });
+async function copyCode(btn){
+  const pre = document.getElementById(btn.dataset.copy); if (!pre) return;
+  try { await navigator.clipboard.writeText(pre.textContent); btn.textContent = "Copied"; }
+  catch (err) { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "Selected"; }
+  clearTimeout(btn._t); btn._t = setTimeout(() => btn.textContent = "Copy", 1600);
+}
 $("#tbl thead").onclick = e => { const th = e.target.closest("th"); if (!th) return; const k = th.dataset.k; S.sort = { col:k, asc:S.sort.col === k ? !S.sort.asc : true }; renderTable(); };
+const typing = t => t instanceof Element && !!t.closest("input,textarea,select,[contenteditable]");
 document.addEventListener("keydown", e => {
+  if (dlg.open) return;   // the dialog handles its own keys (Esc closes it)
   if (e.key === "Escape" && S.sel) setSel(null);
-  if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); }
+  if (e.key === "/" && !typing(e.target)) { e.preventDefault(); $("#q").focus(); }
 });
 $("#btnCopy").onclick = async () => {
   const rows = sortedRows();
@@ -1072,14 +1222,21 @@ $("#btnCopy").onclick = async () => {
 };
 // drag-and-drop and paste
 let dragDepth = 0;
-window.addEventListener("dragenter", e => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragDepth++; $("#drop").hidden = false; } });
-window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("#drop").hidden = true; } });
+// the full-page overlay sits under the modal dialog, so the dialog highlights its own drop area
+const dropUi = on => { $("#drop").hidden = !on || dlg.open; $("#dlgDrop").classList.toggle("over", on && dlg.open); };
+window.addEventListener("dragenter", e => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragDepth++; dropUi(true); } });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; dropUi(false); } });
 window.addEventListener("dragover", e => e.preventDefault());
-window.addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; $("#drop").hidden = true; if (e.dataTransfer?.files?.length) importFiles(e.dataTransfer.files); });
+window.addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; dropUi(false); if (e.dataTransfer?.files?.length) runImport(importFiles(e.dataTransfer.files)); });
 window.addEventListener("paste", e => {
-  if (document.activeElement === $("#q")) return;
   const t = e.clipboardData?.getData("text") || "";
-  if (t.trim().startsWith("{")) { try { const b = JSON.parse(t); if (b.files && loadBundle(b, { name:"pasted" })) persist(b); } catch (err) { showBanner("The pasted text is not a valid JSON bundle."); } }
+  if (dlg.open) {
+    // pasting anywhere in the dialog fills the paste box and loads it
+    if (e.target !== pasteBox && t.trim()) { e.preventDefault(); pasteBox.value = t; loadPasted(); }
+    return;
+  }
+  if (typing(e.target) || !t.trim().startsWith("{")) return;
+  runImport(importText(t, "The pasted text", "pasted"));
 });
 window.addEventListener("resize", () => { clearTimeout(window.__rz); window.__rz = setTimeout(fit, 150); });
 
@@ -1088,7 +1245,7 @@ try { const c = JSON.parse(localStorage.getItem("pvefe.chips") || "[]"); if (Arr
 renderChips();
 (() => {
   const saved = restore();
-  if (saved && loadBundle(saved, { name:"last import" })) return;
+  if (saved && !loadBundle(saved, { name:"last import" })) return;
   if (DEMO) loadBundle(DEMO, { demo:true });
 })();
 </script>

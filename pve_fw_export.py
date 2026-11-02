@@ -21,7 +21,9 @@ Usage:
   python3 pve_fw_export.py                       # writes ./pve-fw-<cluster>-<date>.json
   python3 pve_fw_export.py --live                # + IPs reported by the guest agent
   python3 pve_fw_export.py --pve-dir ./etc-pve -o bundle.json
+  python3 pve_fw_export.py -o -                  # print the JSON (to copy and paste it into the web app)
   python3 pve_fw_export.py -o - | gzip > bundle.json.gz
+  ssh root@pve1 python3 - --live -o - < pve_fw_export.py > pve-fw-export.json
 
 Python 3.6+, standard library only. Run it on any node of the cluster
 (as root, or as a member of the www-data group to read /etc/pve).
@@ -194,7 +196,7 @@ def main():
     out = args.output or "pve-fw-%s-%s.json" % (re.sub(r"[^\w.-]", "_", name), now.strftime("%Y%m%d-%H%M"))
     data = json.dumps(bundle, ensure_ascii=False, indent=1)
     if out == "-":
-        sys.stdout.write(data)
+        sys.stdout.write(data + "\n")
     else:
         with open(out, "w", encoding="utf-8") as fh:
             fh.write(data)
