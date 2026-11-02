@@ -1,0 +1,1097 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Explore Proxmox VE firewall rules as a service map: import a bundle from pve_fw_export.py, filter flows and inspect every rule. Runs entirely in your browser.">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>PVE Flow Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: import bar + filters on top, service map in the centre, detail panel on the right, rule log at the bottom */
+:root{
+  --bg:#eef1f5; --panel:#ffffff; --ink:#142033; --mut:#5c6a7e; --faint:#8a96a8; --line:#d9e0ea; --soft:#f4f6f9;
+  --accent:#2b59d1; --accent-ink:#ffffff;
+  --allow:#1b8f4e; --allow-bg:#e3f4ea; --deny:#cc3b36; --deny-bg:#fbe6e5; --off:#98a3b3; --off-bg:#eceff3; --warn:#a86a12; --warn-bg:#fbf0dc;
+  --k-vm:#e8eefc; --k-ct:#e4f3ee; --k-host:#f8eedf; --k-world:#eef0f4; --k-net:#f1effa;
+  --k-vm-s:#9db3ea; --k-ct-s:#8fc9b5; --k-host-s:#e0bb86; --k-world-s:#b8c0cc; --k-net-s:#bcb2e3;
+  --grid:#dfe4ec;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d121a; --panel:#141b26; --ink:#e2e8f1; --mut:#93a0b3; --faint:#69768a; --line:#253041; --soft:#19212e;
+  --accent:#6f95ff; --accent-ink:#0d121a;
+  --allow:#43c27f; --allow-bg:#163325; --deny:#f0625c; --deny-bg:#3a1c1c; --off:#5f6b7e; --off-bg:#1e2632; --warn:#e3a84b; --warn-bg:#36290f;
+  --k-vm:#18243c; --k-ct:#142c27; --k-host:#2f2517; --k-world:#1c222d; --k-net:#211e33;
+  --k-vm-s:#3b5590; --k-ct-s:#2f6b58; --k-host-s:#7a5b2c; --k-world-s:#3d4757; --k-net-s:#4f4682;
+  --grid:#1a2230; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d121a; --panel:#141b26; --ink:#e2e8f1; --mut:#93a0b3; --faint:#69768a; --line:#253041; --soft:#19212e;
+  --accent:#6f95ff; --accent-ink:#0d121a;
+  --allow:#43c27f; --allow-bg:#163325; --deny:#f0625c; --deny-bg:#3a1c1c; --off:#5f6b7e; --off-bg:#1e2632; --warn:#e3a84b; --warn-bg:#36290f;
+  --k-vm:#18243c; --k-ct:#142c27; --k-host:#2f2517; --k-world:#1c222d; --k-net:#211e33;
+  --k-vm-s:#3b5590; --k-ct-s:#2f6b58; --k-host-s:#7a5b2c; --k-world-s:#3d4757; --k-net-s:#4f4682;
+  --grid:#1a2230; color-scheme:dark}
+
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--mono)}
+
+.app{height:100%;display:grid;grid-template-rows:auto auto auto minmax(0,1fr) minmax(170px,34%);grid-template-areas:"top" "filters" "banner" "work" "flows";
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px;gap:10px;box-sizing:border-box}
+
+/* top bar */
+.top{grid-area:top;display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand h1{font-size:16px;font-weight:600;margin:0;letter-spacing:.01em;white-space:nowrap}
+.ds{font-size:12px;color:var(--mut);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ds b{color:var(--ink);font-weight:500}
+.tagdemo{font-size:11px;padding:2px 7px;border-radius:4px;background:var(--warn-bg);color:var(--warn);font-weight:500}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 11px;cursor:pointer;font-size:13px;white-space:nowrap}
+.btn:hover{border-color:var(--faint)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:500}
+.btn.small{padding:3px 8px;font-size:12px}
+
+/* filters */
+.filters{grid-area:filters;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tokbox{flex:1 1 380px;min-width:0;display:flex;flex-wrap:wrap;gap:5px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 8px;cursor:text}
+.tokbox:focus-within{border-color:var(--accent)}
+.tokbox input{flex:1 1 180px;min-width:120px;border:0;outline:0;background:transparent;padding:3px 0;font-family:var(--mono);font-size:12.5px}
+.chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:12px;background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:1px 4px 1px 7px}
+.chip i{font-style:normal;color:var(--accent)}
+.chip.neg{background:var(--deny-bg);border-color:color-mix(in srgb,var(--deny) 45%,transparent)}
+.chip.neg i{color:var(--deny)}
+.chip button{border:0;background:none;cursor:pointer;color:var(--mut);padding:0 3px;font-size:14px;line-height:1}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;padding:6px 11px;font-size:13px;cursor:pointer;color:var(--mut)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--soft);color:var(--ink);font-weight:500}
+.seg button[data-v="allow"][aria-pressed="true"]{color:var(--allow)}
+.seg button[data-v="deny"][aria-pressed="true"]{color:var(--deny)}
+select.sel{border:1px solid var(--line);background:var(--panel);border-radius:7px;padding:6px 8px;font-size:13px}
+.tog{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mut);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:5px 9px;cursor:pointer;user-select:none}
+.tog input{margin:0;accent-color:var(--accent)}
+
+.banner{grid-area:banner;font-size:13px;border-radius:7px;padding:8px 12px;background:var(--deny-bg);color:var(--deny)}
+.banner.info{background:var(--warn-bg);color:var(--warn)}
+
+/* main area */
+.work{grid-area:work;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:10px;min-height:0}
+.map{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-height:0;
+  background-image:radial-gradient(var(--grid) 1px,transparent 1px);background-size:18px 18px}
+.map svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+.map svg.dragging{cursor:grabbing}
+.mapctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:4px}
+.mapctl button{width:30px;height:30px;border:1px solid var(--line);background:var(--panel);border-radius:6px;cursor:pointer;font-size:15px;line-height:1;color:var(--mut)}
+.mapctl button:hover{color:var(--ink)}
+.legend{position:absolute;left:10px;bottom:10px;display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--mut);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 9px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend svg{width:26px;height:8px}
+.mapstat{position:absolute;left:10px;top:10px;font-size:12px;color:var(--mut);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 9px;font-family:var(--mono)}
+.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--mut);padding:24px;pointer-events:none}
+
+/* SVG cards */
+.card rect.body{stroke-width:1.2;transition:opacity .15s}
+.card{cursor:pointer}
+.card.k-vm rect.body{fill:var(--k-vm);stroke:var(--k-vm-s)}
+.card.k-ct rect.body{fill:var(--k-ct);stroke:var(--k-ct-s)}
+.card.k-host rect.body,.card.k-cluster rect.body{fill:var(--k-host);stroke:var(--k-host-s)}
+.card.k-world rect.body{fill:var(--k-world);stroke:var(--k-world-s)}
+.card.k-ipset rect.body,.card.k-alias rect.body,.card.k-net rect.body,.card.k-vnet rect.body{fill:var(--k-net);stroke:var(--k-net-s)}
+.card:hover rect.body{stroke:var(--ink)}
+.card.sel rect.body{stroke:var(--accent);stroke-width:2.4}
+.card text{font-family:var(--sans);fill:var(--ink)}
+.card .tg{font-family:var(--mono);font-size:10px;fill:var(--mut);letter-spacing:.06em}
+.card .tt{font-size:14.5px;font-weight:600}
+.card .sb{font-family:var(--mono);font-size:11px;fill:var(--mut)}
+.card .pc rect{stroke-width:1}
+.card .pc text{font-family:var(--mono);font-size:10px}
+.pc.allow rect{fill:var(--allow-bg);stroke:var(--allow)} .pc.allow text{fill:var(--allow)}
+.pc.deny rect{fill:var(--deny-bg);stroke:var(--deny)} .pc.deny text{fill:var(--deny)}
+.pc.off rect{fill:var(--off-bg);stroke:var(--off)} .pc.off text{fill:var(--off)}
+.card .more{font-family:var(--mono);font-size:10px;fill:var(--mut)}
+.card .dot.running{fill:var(--allow)} .card .dot.stopped{fill:var(--off)}
+.dim{opacity:.18}
+.edge path.ln{fill:none;transition:opacity .15s}
+.edge.allow path.ln{stroke:var(--allow)}
+.edge.deny path.ln{stroke:var(--deny);stroke-dasharray:6 4}
+.edge.off path.ln{stroke:var(--off);stroke-dasharray:2 4}
+.edge path.hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+.edge.sel path.ln{stroke-width:3.6!important}
+.mk-allow{fill:var(--allow)} .mk-deny{fill:var(--deny)} .mk-off{fill:var(--off)}
+.edge .lbl rect{fill:var(--panel);stroke:var(--line)}
+.edge .lbl text{font-family:var(--mono);font-size:10.5px;fill:var(--ink)}
+
+/* side panel */
+.side{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;min-height:0;padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+.side h2{font-size:15px;margin:0;font-weight:600;overflow-wrap:anywhere}
+.side h3{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:0 0 6px;font-weight:500}
+.eyebrow{font-family:var(--mono);font-size:11px;color:var(--mut);letter-spacing:.05em;text-transform:uppercase}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:13px}
+.kv dt{color:var(--mut)} .kv dd{margin:0;overflow-wrap:anywhere}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stat{border:1px solid var(--line);border-radius:7px;padding:7px 10px}
+.stat b{display:block;font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--mut)}
+.stat.allow b{color:var(--allow)} .stat.deny b{color:var(--deny)}
+.pill{display:inline-block;font-size:11.5px;font-weight:500;border-radius:4px;padding:1px 7px;white-space:nowrap}
+.pill.ACCEPT{background:var(--allow-bg);color:var(--allow)}
+.pill.DROP,.pill.REJECT{background:var(--deny-bg);color:var(--deny)}
+.pill.off{background:var(--off-bg);color:var(--mut)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.raw{font-family:var(--mono);font-size:12px;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:8px 10px;white-space:pre-wrap;overflow-wrap:anywhere}
+.list{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.list li{display:flex;gap:8px;align-items:baseline;justify-content:space-between;font-size:13px;padding:4px 6px;border-radius:5px}
+.list li.clk{cursor:pointer} .list li.clk:hover{background:var(--soft)}
+.list li .m{font-family:var(--mono);font-size:11.5px;color:var(--mut);text-align:right;overflow-wrap:anywhere}
+.alerts li{display:block;font-size:12.5px;padding:6px 8px;border-radius:6px;background:var(--warn-bg);color:var(--warn);margin-bottom:4px}
+.row-btns{display:flex;gap:6px;flex-wrap:wrap}
+.side a{color:var(--accent)}
+.hint{font-size:12.5px;color:var(--mut)}
+.hint code{font-family:var(--mono);font-size:11.5px;background:var(--soft);padding:0 4px;border-radius:3px}
+textarea.copy{width:100%;height:120px;font-family:var(--mono);font-size:11px;background:var(--soft);border:1px solid var(--line);border-radius:6px;color:var(--ink)}
+
+/* rule log */
+.flows{grid-area:flows;background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.fhead{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.fhead b{font-size:13px} .fhead .cnt{font-size:12px;color:var(--mut);font-family:var(--mono)}
+.fhead .sp{flex:1}
+.tw{overflow:auto;min-height:0;flex:1}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:5px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--soft);font-weight:500;color:var(--mut);font-size:11.5px;letter-spacing:.03em;cursor:pointer;user-select:none;z-index:1}
+th[aria-sort]::after{content:" ↓";color:var(--accent)} th[aria-sort="ascending"]::after{content:" ↑"}
+tbody tr{cursor:pointer} tbody tr:hover td{background:var(--soft)}
+tbody tr.on td{background:var(--soft);box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--accent) 8%,transparent)}
+tbody tr.inactive td{color:var(--faint)}
+td.mono,td .mono{font-family:var(--mono);font-size:12px}
+td.cm{white-space:normal;min-width:160px;color:var(--mut)}
+.arrow{color:var(--faint)}
+
+.dropzone{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 82%,transparent);border:3px dashed var(--accent);font-size:18px;font-weight:500;color:var(--accent)}
+
+@media (max-width:900px){
+  html,body{height:auto}
+  .app{height:auto;display:flex;flex-direction:column}
+  .work{display:flex;flex-direction:column}
+  .map{height:62vh;min-height:360px}
+  .side{max-height:none}
+  .flows{height:70vh}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="3" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="3" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="7.5" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 6h6M4.5 9v3.5h6.5V14M17.5 9v3.5H11" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+      <h1>PVE Flow Explorer</h1>
+      <span class="ds" id="ds"></span>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btnImport" type="button">Import bundle…</button>
+      <input type="file" id="file" accept=".json,.fw,application/json" multiple hidden>
+      <button class="btn" id="btnDemo" type="button">Load sample</button>
+      <a class="btn" href="https://github.com/mrwazaby/pxe-fw-audit" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </header>
+
+  <div class="filters">
+    <div class="tokbox" id="tokbox" title="Syntax: from: to: ip: port: proto: node: group: scope: action: or free text. Prefix with - to exclude (e.g. -proto:icmp)">
+      <span id="chips" style="display:contents"></span>
+      <input id="q" autocomplete="off" spellcheck="false" placeholder="from:web01  to:pg  port:5432  -proto:icmp  node:pve1 …">
+    </div>
+    <div class="seg" id="verdict" role="group" aria-label="Verdict">
+      <button type="button" data-v="all" aria-pressed="true">All</button>
+      <button type="button" data-v="allow" aria-pressed="false">Allowed</button>
+      <button type="button" data-v="deny" aria-pressed="false">Blocked</button>
+    </div>
+    <select class="sel" id="hide" aria-label="Hide traffic">
+      <option value="">Hide…</option>
+      <option value="-proto:icmp">ICMP / ping</option>
+      <option value="-port:53">DNS (53)</option>
+      <option value="-port:123">NTP (123)</option>
+      <option value="-port:22">SSH (22)</option>
+      <option value="-port:67-68">DHCP (67-68)</option>
+      <option value="-port:9100">node_exporter (9100)</option>
+      <option value="-proto:udp">All UDP</option>
+    </select>
+    <select class="sel" id="node" aria-label="Node"></select>
+    <select class="sel" id="dir" aria-label="Direction">
+      <option value="">All directions</option><option value="IN">IN</option><option value="OUT">OUT</option><option value="FORWARD">FORWARD</option>
+    </select>
+    <label class="tog"><input type="checkbox" id="tOff">Inactive</label>
+    <label class="tog"><input type="checkbox" id="tPol">Policies</label>
+    <label class="tog"><input type="checkbox" id="tAny" checked>any</label>
+  </div>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <main class="work">
+    <section class="map" id="mapWrap" aria-label="Service map">
+      <svg id="map" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="m-allow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse"><path class="mk-allow" d="M0,0L10,5L0,10z"/></marker>
+          <marker id="m-deny" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse"><path class="mk-deny" d="M0,0L10,5L0,10z"/></marker>
+          <marker id="m-off" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse"><path class="mk-off" d="M0,0L10,5L0,10z"/></marker>
+        </defs>
+        <g id="vp"><g id="gEdges"></g><g id="gCards"></g><g id="gLabels"></g></g>
+      </svg>
+      <div class="mapstat" id="mapstat"></div>
+      <div class="mapctl">
+        <button type="button" id="zIn" title="Zoom in">+</button>
+        <button type="button" id="zOut" title="Zoom out">−</button>
+        <button type="button" id="zFit" title="Fit to view">⤢</button>
+      </div>
+      <div class="legend">
+        <span><svg viewBox="0 0 26 8"><path d="M1 4H25" stroke="var(--allow)" stroke-width="2.4"/></svg>Allowed</span>
+        <span><svg viewBox="0 0 26 8"><path d="M1 4H25" stroke="var(--deny)" stroke-width="2.4" stroke-dasharray="6 4"/></svg>Blocked</span>
+        <span><svg viewBox="0 0 26 8"><path d="M1 4H25" stroke="var(--off)" stroke-width="2.4" stroke-dasharray="2 4"/></svg>Inactive</span>
+      </div>
+      <div class="empty" id="empty" hidden></div>
+    </section>
+    <aside class="side" id="side" aria-live="polite"></aside>
+  </main>
+
+  <section class="flows" aria-label="Rules">
+    <div class="fhead">
+      <b>Rules</b><span class="cnt" id="cnt"></span>
+      <span id="selInfo"></span>
+      <span class="sp"></span>
+      <button class="btn small" id="btnCopy" type="button">Copy as CSV</button>
+    </div>
+    <div class="tw"><table id="tbl"><thead><tr></tr></thead><tbody></tbody></table></div>
+  </section>
+</div>
+<div class="dropzone" id="drop" hidden>Drop the JSON bundle (or .fw files)</div>
+
+<script>
+"use strict";
+const DEMO = {"format":"pve-fw-raw","version":1,"meta":{"cluster":"prod-lyon","host":"pve1","generated":"2026-11-02T09:41:00+01:00","pveVersion":"pve-manager/8.4.1","source":"/etc/pve"},"nodes":["pve1","pve2"],"files":{"firewall/101.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nIN Ping(ACCEPT) -source 10.10.0.0/24\nGROUP web -i net0\nOUT ACCEPT -dest +dbservers -p tcp -dport 5432\nOUT DNS(ACCEPT) -dest 10.10.0.2\n|IN SSH(ACCEPT) # debug\n","firewall/102.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nGROUP web -i net0\nOUT ACCEPT -dest +dbservers -p tcp -dport 5432\nOUT DNS(ACCEPT) -dest 10.10.0.2\n","firewall/110.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nIN HTTPS(ACCEPT)\nIN HTTP(ACCEPT)\nIN ACCEPT -source admin_net -p tcp -dport 8404 # HAProxy stats\nOUT ACCEPT -dest +frontends -p tcp -dport 80,443\n","firewall/121.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nGROUP db\nIN ACCEPT -source 10.10.0.22 -p tcp -dport 5432 # replication\nOUT ACCEPT -dest backup_srv -p tcp -dport 8007\n","firewall/122.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nGROUP db\nOUT ACCEPT -dest 10.10.0.21 -p tcp -dport 5432 # replication\n","firewall/130.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nIN Ping(ACCEPT)\nIN DNS(ACCEPT) -source 10.10.0.0/24\nOUT DNS(ACCEPT)\nIN ACCEPT -source +monitoring -p tcp -dport 9100\n","firewall/150.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nIN ACCEPT -source admin_net -p tcp -dport 9090 # Prometheus UI\nOUT ACCEPT -dest 10.10.0.0/24 -p tcp -dport 9100,9187 # scrape\nOUT ACCEPT -dest 10.10.0.10 -p tcp -dport 8404\n","firewall/160.fw":"[OPTIONS]\nenable: 0\n\n[RULES]\nIN ACCEPT # wide open for testing\n","firewall/170.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nIN RDP(ACCEPT) -source vpn_users\nIN ACCEPT -source +frontends -p tcp -dport 1433\n","firewall/cluster.fw":"[OPTIONS]\nenable: 1\npolicy_in: DROP\n\n[ALIASES]\nadmin_net 192.168.10.0/24 # admin workstations\nvpn_users 172.16.0.0/16 # WireGuard VPN\nbackup_srv 10.20.0.5 # Proxmox Backup Server\n\n[IPSET monitoring] # Prometheus + Zabbix\n10.10.0.50\n10.10.0.51\n\n[IPSET dbservers]\n10.10.0.21\n10.10.0.22\n\n[IPSET frontends]\n10.10.0.11\n10.10.0.12\n\n[RULES]\nIN SSH(ACCEPT) -source admin_net -log nolog # admin SSH\nIN ACCEPT -source vpn_users -p tcp -dport 8006 # Proxmox web UI\nIN ACCEPT -source +monitoring -p tcp -dport 9100 # node_exporter\nIN ACCEPT -source backup_srv -p tcp -dport 8007\nIN Ping(ACCEPT) -source admin_net\nIN DROP -p tcp -dport 22 -log warning\n|IN ACCEPT -p tcp -dport 3128 # legacy proxy\n\n[group web] # web servers\nIN HTTP(ACCEPT)\nIN HTTPS(ACCEPT)\nIN ACCEPT -source +monitoring -p tcp -dport 9100\n\n[group db] # databases\nIN PostgreSQL(ACCEPT) -source +frontends\nIN ACCEPT -source +monitoring -p tcp -dport 9187\nIN REJECT -p tcp -dport 3306\n","nodes/pve1/host.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nIN Ceph(ACCEPT) -source 10.30.0.0/24 # Ceph network\nIN ACCEPT -source 10.30.0.0/24 -p udp -dport 5405:5412 # corosync\n","nodes/pve2/host.fw":"[OPTIONS]\nenable: 1\n\n[RULES]\nIN ACCEPT -source 10.30.0.0/24 -p udp -dport 5405:5412 # corosync\n","sdn/vnets.cfg":"vnet: vnetprod\n\tzone prod\n\talias Production\n","sdn/subnets.cfg":"subnet: prod-10.10.0.0-24\n\tvnet vnetprod\n\tgateway 10.10.0.1\n"},"guests":{"101":{"node":"pve1","type":"qemu","conf":"name: web01\nnet0: virtio=BC:24:11:00:00:101,bridge=vnetprod,firewall=1\nipconfig0: ip=10.10.0.11/24,gw=10.10.0.1"},"160":{"node":"pve1","type":"qemu","conf":"name: sandbox\nnet0: virtio=BC:24:11:00:00:160,bridge=vnetprod,firewall=1\nipconfig0: ip=dhcp,gw=10.10.0.1"},"180":{"node":"pve1","type":"qemu","conf":"name: jump-host\nnet0: virtio=BC:24:11:00:00:180,bridge=vnetprod,firewall=1\nipconfig0: ip=10.10.0.80/24,gw=10.10.0.1"},"102":{"node":"pve2","type":"qemu","conf":"name: web02\nnet0: virtio=BC:24:11:00:00:102,bridge=vnetprod,firewall=1\nipconfig0: ip=10.10.0.12/24,gw=10.10.0.1"},"150":{"node":"pve2","type":"qemu","conf":"name: prometheus\nnet0: virtio=BC:24:11:00:00:150,bridge=vnetprod,firewall=1\nipconfig0: ip=10.10.0.50/24,gw=10.10.0.1"},"170":{"node":"pve2","type":"qemu","conf":"name: legacy-erp\nnet0: virtio=BC:24:11:00:00:170,bridge=vnetprod,firewall=0\nipconfig0: ip=10.10.0.70/24,gw=10.10.0.1"},"110":{"node":"pve1","type":"lxc","conf":"hostname: haproxy\nnet0: name=eth0,bridge=vnetprod,firewall=1,hwaddr=BC:24:11:00:01:110,ip=10.10.0.10/24,gw=10.10.0.1,type=veth"},"121":{"node":"pve1","type":"lxc","conf":"hostname: pg-primary\nnet0: name=eth0,bridge=vnetprod,firewall=1,hwaddr=BC:24:11:00:01:121,ip=10.10.0.21/24,gw=10.10.0.1,type=veth"},"122":{"node":"pve2","type":"lxc","conf":"hostname: pg-replica\nnet0: name=eth0,bridge=vnetprod,firewall=1,hwaddr=BC:24:11:00:01:122,ip=10.10.0.22/24,gw=10.10.0.1,type=veth"},"130":{"node":"pve2","type":"lxc","conf":"hostname: dns01\nnet0: name=eth0,bridge=vnetprod,firewall=1,hwaddr=BC:24:11:00:01:130,ip=10.10.0.2/24,gw=10.10.0.1,type=veth"}},"live":{"resources":[{"vmid":101,"name":"","node":"pve1","type":"qemu","status":"running"},{"vmid":160,"name":"","node":"pve1","type":"qemu","status":"stopped"},{"vmid":180,"name":"","node":"pve1","type":"qemu","status":"running"},{"vmid":102,"name":"","node":"pve2","type":"qemu","status":"running"},{"vmid":150,"name":"","node":"pve2","type":"qemu","status":"running"},{"vmid":170,"name":"","node":"pve2","type":"qemu","status":"running"},{"vmid":110,"name":"","node":"pve1","type":"lxc","status":"running"},{"vmid":121,"name":"","node":"pve1","type":"lxc","status":"running"},{"vmid":122,"name":"","node":"pve2","type":"lxc","status":"running"},{"vmid":130,"name":"","node":"pve2","type":"lxc","status":"running"}],"ips":{},"nodeIps":{}}};
+
+/* ------------------------------------------------------------------ reference data */
+const MACROS = {
+  ssh:[["tcp","22"]], http:[["tcp","80"]], https:[["tcp","443"]], web:[["tcp","80,443"]],
+  dns:[["tcp","53"],["udp","53"]], ping:[["icmp",""]], ntp:[["udp","123"]], smtp:[["tcp","25"]],
+  smtps:[["tcp","465"]], submission:[["tcp","587"]], imap:[["tcp","143"]], imaps:[["tcp","993"]],
+  pop3:[["tcp","110"]], pop3s:[["tcp","995"]], ftp:[["tcp","21"]], telnet:[["tcp","23"]],
+  rdp:[["tcp","3389"]], vnc:[["tcp","5900:5999"]], mysql:[["tcp","3306"]], postgresql:[["tcp","5432"]],
+  snmp:[["udp","161:162"]], ldap:[["tcp","389"]], ldaps:[["tcp","636"]], syslog:[["tcp","514"],["udp","514"]],
+  rsync:[["tcp","873"]], smb:[["tcp","139,445"],["udp","137:139"]], ceph:[["tcp","3300,6789,6800:7300"]],
+  squid:[["tcp","3128"]], git:[["tcp","9418"]], dhcpfwd:[["udp","67:68"]], trcrt:[["udp","33434:33524"]],
+  openvpn:[["udp","1194"]], bgp:[["tcp","179"]], hkp:[["tcp","11371"]], ipp:[["tcp","631"]],
+  jabber:[["tcp","5222"]], irc:[["tcp","6667"]], l2tp:[["udp","1701"]], mssql:[["tcp","1433"]],
+  webcache:[["tcp","8080"]], webmin:[["tcp","10000"]], auth:[["tcp","113"]], cvs:[["tcp","2401"]],
+  distcc:[["tcp","3632"]], razor:[["tcp","2703"]], spamd:[["tcp","783"]], pcanywhere:[["tcp","5631"],["udp","5632"]],
+  dhcpv6:[["udp","546:547"]], bittorrent:[["tcp","6881:6889"],["udp","6881"]], amanda:[["udp","10080"],["tcp","10080"]],
+  citrix:[["tcp","1494"],["udp","1604"]], daap:[["tcp","3689"],["udp","3689"]], icpv2:[["udp","3130"]],
+  ipsec:[["udp","500"]], "ipsecnat":[["udp","500,4500"]], mdns:[["udp","5353"]], nntp:[["tcp","119"]],
+  pptp:[["tcp","1723"]], tftp:[["udp","69"]], finger:[["tcp","79"]], gnunet:[["tcp","2086"]], lpd:[["tcp","515"]],
+};
+const PORTNAMES = {ssh:22,http:80,https:443,domain:53,ntp:123,smtp:25,ftp:21,mysql:3306,postgresql:5432,ldap:389,
+  ldaps:636,snmp:161,imap:143,imaps:993,pop3:110,pop3s:995,telnet:23,rsync:873,"ms-wbt-server":3389};
+const KIND_RANK = {world:0,alias:1,net:1,vnet:1,ipset:1,cluster:2,host:3,ct:4,vm:4};
+const W = 228, H = 92, GX = 120, GY = 22, MAXCOLS = 6;
+
+/* ------------------------------------------------------------------ state */
+const S = { chips:[], verdict:"all", node:"", dir:"", showOff:false, showPol:false, showAny:true,
+  sel:null, sort:{col:"scope",asc:true}, view:{x:0,y:0,k:1}, isDemo:false, layoutKey:"" };
+let M = null, G = null, VIS = [];
+
+/* ------------------------------------------------------------------ helpers */
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const trunc = (s, n) => (s = String(s || "")).length > n ? s.slice(0, n - 1) + "…" : s;
+function ip4(s){ const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s); return m ? (((+m[1]) << 24) >>> 0) + (+m[2] << 16) + (+m[3] << 8) + (+m[4]) : null; }
+function overlap(a, b){
+  const [an, ab] = String(a).split("/"), [bn, bb] = String(b).split("/");
+  const A = ip4(an), B = ip4(bn);
+  if (A == null || B == null) return an.toLowerCase() === bn.toLowerCase();
+  const bits = Math.min(ab === undefined ? 32 : +ab, bb === undefined ? 32 : +bb);
+  if (bits <= 0) return true;
+  const mask = (~0 << (32 - bits)) >>> 0;
+  return ((A & mask) >>> 0) === ((B & mask) >>> 0);
+}
+const isAddr = v => /^[0-9a-f.:]+(\/\d+)?$/i.test(v) && /[.:]/.test(v);
+const hostAddr = v => { const [a, b] = v.split("/"); if (b === undefined) return a; if ((a.includes(":") && b === "128") || (!a.includes(":") && b === "32")) return a; return null; };
+
+/* ------------------------------------------------------------------ PVE file parsing */
+function parseOpts(t){
+  const o = {};
+  for (let i = 0; i < t.length; i++) {
+    if (t[i].startsWith("-") && i + 1 < t.length) { let k = t[i].replace(/^-+/, ""); if (k === "i") k = "iface"; o[k] = t[++i]; }
+  }
+  return o;
+}
+function parseRule(line, n){
+  const raw = line; let comment = "";
+  const h = line.indexOf("#"); if (h >= 0) { comment = line.slice(h + 1).trim(); line = line.slice(0, h).trim(); }
+  let enabled = true; if (line.startsWith("|")) { enabled = false; line = line.slice(1).trim(); }
+  const t = line.split(/\s+/); if (t.length < 2) return null;
+  const r = { raw, line:n, enabled, comment, dir:t[0].toUpperCase() };
+  if (r.dir === "GROUP") return Object.assign(r, { type:"group", group:t[1].toLowerCase(), opts:parseOpts(t.slice(2)) });
+  const m = /^([\w-]+)\((\w+)\)$/.exec(t[1]);
+  if (m) { r.macro = m[1]; r.action = m[2].toUpperCase(); } else { r.macro = null; r.action = t[1].toUpperCase(); }
+  return Object.assign(r, { type:"rule", opts:parseOpts(t.slice(2)) });
+}
+function parseFw(text){
+  const d = { options:{}, aliases:{}, ipsets:{}, ipsetComments:{}, rules:[], groups:{}, groupComments:{} };
+  let sec = null, name = null;
+  String(text || "").split(/\r?\n/).forEach((rawLine, i) => {
+    const line = rawLine.trim(); if (!line || line.startsWith("#")) return;
+    const m = /^\[(\S+?)(?:\s+([^\]]+))?\]\s*(?:#\s*(.*))?$/.exec(line);
+    if (m) {
+      sec = m[1].toUpperCase(); name = (m[2] || "").trim().toLowerCase();
+      if (sec === "IPSET") { d.ipsets[name] = d.ipsets[name] || []; d.ipsetComments[name] = m[3] || ""; }
+      if (sec === "GROUP") { d.groups[name] = d.groups[name] || []; d.groupComments[name] = m[3] || ""; }
+      return;
+    }
+    if (sec === "OPTIONS") { const k = line.indexOf(":"); if (k > 0) d.options[line.slice(0, k).trim()] = line.slice(k + 1).trim(); }
+    else if (sec === "ALIASES") { const p = line.split("#")[0].trim().split(/\s+/); if (p.length >= 2) d.aliases[p[0].toLowerCase()] = { value:p[1], comment:(line.split("#")[1] || "").trim(), name:p[0] }; }
+    else if (sec === "IPSET") { const e = line.split("#")[0].trim(); if (e) d.ipsets[name].push(e); }
+    else if (sec === "RULES" || sec === "GROUP") { const r = parseRule(line, i + 1); if (r) (sec === "RULES" ? d.rules : d.groups[name]).push(r); }
+  });
+  return d;
+}
+function kv(s){ const o = {}; s.split(",").forEach(p => { const i = p.indexOf("="); if (i > 0) o[p.slice(0, i).trim()] = p.slice(i + 1).trim(); }); return o; }
+function parseConf(text){
+  const g = { name:"", tags:"", nics:{} };
+  const nic = k => g.nics[k] = g.nics[k] || { id:k };
+  for (const raw of String(text || "").split(/\r?\n/)) {
+    const l = raw.trim(); if (l.startsWith("[")) break; let m;
+    if ((m = /^(name|hostname):\s*(.+)$/.exec(l))) g.name = m[2].trim();
+    else if ((m = /^tags:\s*(.+)$/.exec(l))) g.tags = m[1].trim();
+    else if ((m = /^net(\d+):\s*(.+)$/.exec(l))) { const o = kv(m[2]), n = nic("net" + m[1]); Object.assign(n, { bridge:o.bridge || "", tag:o.tag || "", firewall:o.firewall === "1" }); if (o.ip) n.ip = o.ip; if (o.ip6) n.ip6 = o.ip6; }
+    else if ((m = /^ipconfig(\d+):\s*(.+)$/.exec(l))) { const o = kv(m[2]), n = nic("net" + m[1]); if (o.ip) n.ip = o.ip; if (o.ip6) n.ip6 = o.ip6; }
+  }
+  g.nics = Object.values(g.nics);
+  g.ips = g.nics.flatMap(n => [n.ip, n.ip6]).filter(v => v && isAddr(v)).map(v => v.split("/")[0]);
+  return g;
+}
+function parseSdn(files){
+  const subnets = [], vnets = {};
+  let cur = null;
+  String(files["sdn/vnets.cfg"] || "").split(/\r?\n/).forEach(l => {
+    let m; if ((m = /^vnet:\s*(\S+)/.exec(l))) { cur = vnets[m[1]] = { name:m[1] }; }
+    else if (cur && (m = /^\s+(\w+)\s+(.+)$/.exec(l))) cur[m[1]] = m[2].trim();
+  });
+  cur = null;
+  String(files["sdn/subnets.cfg"] || "").split(/\r?\n/).forEach(l => {
+    let m; if ((m = /^subnet:\s*(\S+)/.exec(l))) { const p = m[1].split("-"); const mask = p.pop(), net = p.pop(); cur = { id:m[1], cidr:net + "/" + mask, zone:p.join("-") }; subnets.push(cur); }
+    else if (cur && (m = /^\s+(\w+)\s+(.+)$/.exec(l))) cur[m[1]] = m[2].trim();
+  });
+  subnets.forEach(s => { const v = vnets[s.vnet]; if (v && v.alias) s.alias = v.alias; });
+  return { subnets, vnets };
+}
+
+/* ------------------------------------------------------------------ model: resolution */
+function buildModel(bundle){
+  const files = bundle.files || {};
+  const live = bundle.live || {};
+  const m = { bundle, entities:new Map(), flows:[], alerts:[], ipIndex:new Map(), guests:{}, nodes:[], noFw:[] };
+  const alert = (t) => { if (!m.alerts.includes(t)) m.alerts.push(t); };
+  const cl = parseFw(files["firewall/cluster.fw"] || "");
+  m.cluster = cl; m.clusterOn = cl.options.enable === "1";
+  m.sdn = parseSdn(files);
+  if (!files["firewall/cluster.fw"]) alert("No firewall/cluster.fw in the bundle: datacenter aliases, IPSets and groups are unknown.");
+  if (!m.clusterOn) alert("The datacenter firewall is disabled: no rule is enforced, neither on hosts nor on guests.");
+
+  const status = {}; (live.resources || []).forEach(r => status[String(r.vmid)] = r);
+  for (const [vmid, g] of Object.entries(bundle.guests || {})) {
+    const c = parseConf(g.conf);
+    const ips = [...new Set([...c.ips, ...((live.ips || {})[vmid] || [])])];
+    m.guests[vmid] = { vmid, node:g.node, type:g.type === "lxc" ? "ct" : "vm", name:c.name || (status[vmid] || {}).name || "", nics:c.nics, ips, tags:c.tags, status:(status[vmid] || {}).status || "" };
+    ips.forEach(ip => m.ipIndex.set(ip, "g:" + vmid));
+  }
+  const nodeSet = new Set(bundle.nodes || []);
+  Object.keys(files).forEach(k => { const x = /^nodes\/([^/]+)\//.exec(k); if (x) nodeSet.add(x[1]); });
+  Object.values(m.guests).forEach(g => g.node && nodeSet.add(g.node));
+  m.nodes = [...nodeSet].sort();
+  for (const [node, ips] of Object.entries(live.nodeIps || {})) ips.forEach(ip => m.ipIndex.set(ip.split("/")[0], "h:" + node));
+
+  const E = (id, props) => { if (!m.entities.has(id)) m.entities.set(id, Object.assign({ id, ips:[], nets:[], members:[], node:null }, props)); return id; };
+  const world = () => E("world", { kind:"world", title:"any", tag:"WORLD", sub:"all addresses", nets:["0.0.0.0/0", "::/0"] });
+  const guestE = vmid => {
+    const g = m.guests[vmid];
+    if (!g) return E("g:" + vmid, { kind:"vm", title:"VMID " + vmid, tag:"VMID " + vmid, sub:"config not found", vmid });
+    return E("g:" + vmid, { kind:g.type, title:g.name || (g.type.toUpperCase() + " " + vmid), tag:(g.type === "ct" ? "CT " : "VM ") + vmid + " · " + g.node, sub:g.ips.join(", ") || "unknown IP", ips:g.ips, node:g.node, vmid, status:g.status });
+  };
+  const hostE = node => E("h:" + node, { kind:"host", title:node, tag:"PVE HOST", sub:((live.nodeIps || {})[node] || []).join(", ") || "host.fw rules", ips:(live.nodeIps || {})[node] || [], node });
+  const clusterE = () => E("cluster", { kind:"cluster", title:"All hosts", tag:"DATACENTER", sub:m.nodes.join(", ") || "cluster.fw", ips:Object.values(live.nodeIps || {}).flat() });
+  const idToEntity = id => id.startsWith("g:") ? guestE(id.slice(2)) : hostE(id.slice(2));
+
+  function aliasValue(name, local){
+    let n = name.toLowerCase(), scope = "";
+    const sl = n.indexOf("/"); if (sl > 0 && /^(dc|guest)$/.test(n.slice(0, sl))) { scope = n.slice(0, sl); n = n.slice(sl + 1); }
+    if (scope !== "dc" && local && local.aliases[n]) return { value:local.aliases[n].value, alias:n, owner:local._owner, comment:local.aliases[n].comment };
+    if (scope !== "guest" && cl.aliases[n]) return { value:cl.aliases[n].value, alias:n, owner:"dc", comment:cl.aliases[n].comment };
+    if (!isAddr(name)) alert(`Alias "${name}" not found.`);
+    return { value:name };
+  }
+  function single(values){
+    if (values.length !== 1) return null;
+    const v = values[0];
+    if (v === "0.0.0.0/0" || v === "::/0") return world();
+    const a = hostAddr(v); if (!a) return null;
+    const id = m.ipIndex.get(a); return id ? idToEntity(id) : null;
+  }
+  function resolve(spec, local){
+    if (!spec) return world();
+    const neg = spec.startsWith("!"), s = neg ? spec.slice(1) : spec, pre = neg ? "¬ " : "";
+    if (s.startsWith("+")) {
+      let name = s.slice(1).toLowerCase(), scope = "";
+      const sl = name.indexOf("/"); if (sl > 0) { scope = name.slice(0, sl); name = name.slice(sl + 1); }
+      let owner, entries, comment = "";
+      if (scope === "guest" || (scope !== "dc" && local && local.ipsets[name])) { owner = local ? local._owner : "?"; entries = (local && local.ipsets[name]) || []; comment = local ? local.ipsetComments[name] : ""; }
+      else { owner = "dc"; entries = cl.ipsets[name]; comment = cl.ipsetComments[name] || ""; if (!entries) { alert(`IPSet "${name}" not found.`); entries = []; } }
+      const members = entries.map(e => { const n = e.startsWith("!"); const r = aliasValue(n ? e.slice(1) : e, local); return { raw:e, value:r.value, neg:n, alias:r.alias }; });
+      const pos = members.filter(x => !x.neg).map(x => x.value);
+      if (!neg && members.length === 1) { const one = single(pos); if (one) return one; }
+      return E(`ipset:${neg ? "!" : ""}${owner}:${name}`, { kind:"ipset", title:pre + name, tag:"IPSET" + (owner === "dc" ? "" : " · " + owner), sub:pos.join(", ") || "empty", nets:neg ? [] : pos, members, neg, comment, owner });
+    }
+    const parts = s.split(",").map(x => x.trim()).filter(Boolean);
+    const res = parts.map(p => aliasValue(p, local)), vals = res.map(r => r.value);
+    if (!neg) { const one = single(vals); if (one) return one; }
+    if (parts.length === 1 && res[0].alias) {
+      return E(`alias:${neg ? "!" : ""}${res[0].owner}:${res[0].alias}`, { kind:"alias", title:pre + res[0].alias, tag:"ALIAS" + (res[0].owner === "dc" ? "" : " · " + res[0].owner), sub:vals[0], nets:neg ? [] : vals, neg, comment:res[0].comment });
+    }
+    if (parts.length === 1) {
+      const sn = m.sdn.subnets.find(x => x.cidr === vals[0]);
+      if (sn) return E(`vnet:${neg ? "!" : ""}${sn.cidr}`, { kind:"vnet", title:pre + (sn.alias || sn.vnet || sn.cidr), tag:"VNET " + (sn.vnet || "") + " · " + (sn.zone || ""), sub:sn.cidr, nets:neg ? [] : [sn.cidr], neg });
+    }
+    return E(`net:${neg ? "!" : ""}${s}`, { kind:"net", title:pre + trunc(vals.join(", "), 30), tag:"NETWORK", sub:vals.length > 1 ? vals.length + " entries" : "address / CIDR", nets:neg ? [] : vals, neg });
+  }
+
+  function service(rule){
+    const o = rule.opts; let parts;
+    if (rule.macro) {
+      const def = MACROS[rule.macro.toLowerCase()];
+      parts = def ? def.map(([p, ports]) => ({ proto:p, ports })) : [{ proto:"?", ports:"" }];
+      if (!def) alert(`Macro "${rule.macro}" is not in the built-in list: its ports are shown as unknown.`);
+    } else parts = [{ proto:(o.p || "").toLowerCase(), ports:o.dport || "" }];
+    const fmt = p => (p.proto || "any") + (p.ports ? "/" + p.ports.replace(/:/g, "-") : "");
+    let label = parts.map(fmt).join(" ");
+    if (o["icmp-type"]) label += " " + o["icmp-type"];
+    const short = rule.macro ? rule.macro : (parts[0].proto || parts[0].ports ? fmt(parts[0]) : "all");
+    const ranges = [];
+    parts.forEach(p => {
+      if (!p.ports) { ranges.push({ proto:p.proto, lo:0, hi:65535 }); return; }
+      p.ports.split(",").forEach(x => {
+        const [a, b] = x.split(":"); const lo = /^\d+$/.test(a) ? +a : PORTNAMES[a.toLowerCase()], hi = b ? (/^\d+$/.test(b) ? +b : PORTNAMES[b.toLowerCase()]) : lo;
+        if (lo != null) ranges.push({ proto:p.proto, lo, hi:hi == null ? lo : hi });
+      });
+    });
+    return { label:(rule.macro ? rule.macro + " · " : "") + label, short, parts, ranges, sport:o.sport || "" };
+  }
+
+  function addRule(rule, target, ctx){
+    if (rule.type === "group") {
+      const g = cl.groups[rule.group];
+      if (!g) { alert(`Security group "${rule.group}" not found (${ctx.file}).`); return; }
+      g.forEach(r => addRule(Object.assign({}, r, { enabled:r.enabled && rule.enabled }), target,
+        Object.assign({}, ctx, { group:rule.group, iface:rule.opts.iface || ctx.iface, groupLine:rule.line, groupRaw:rule.raw, groupFile:"cluster.fw" })));
+      return;
+    }
+    const o = rule.opts, d = rule.dir;
+    let src, dst;
+    if (d === "IN") { src = resolve(o.source, ctx.local); dst = o.dest ? resolve(o.dest, ctx.local) : target; }
+    else if (d === "OUT") { src = o.source ? resolve(o.source, ctx.local) : target; dst = resolve(o.dest, ctx.local); }
+    else { src = resolve(o.source, ctx.local); dst = o.dest ? resolve(o.dest, ctx.local) : (ctx.vnet ? target : world()); }
+    const svc = service(rule);
+    const state = !rule.enabled ? "rule-off" : (!ctx.fwOn ? "fw-off" : "active");
+    m.flows.push({ id:m.flows.length, order:++ctx.counter.n, scope:ctx.scope, file:ctx.group ? "cluster.fw" : ctx.file, line:rule.line, raw:rule.raw,
+      appliedIn:ctx.file, groupLine:ctx.groupLine, groupRaw:ctx.groupRaw,
+      dir:d, src, dst, srcSpec:o.source || "", dstSpec:o.dest || "", svc, action:rule.action, iface:o.iface || ctx.iface || "",
+      group:ctx.group || "", state, why:state === "rule-off" ? "Rule disabled (| prefix)" : (state === "fw-off" ? ctx.why : ""),
+      log:o.log || "", comment:rule.comment, policy:false, target });
+  }
+  function addPolicy(target, ctx, opts, kinds){
+    const defs = { IN:["policy_in", "DROP"], OUT:["policy_out", "ACCEPT"] };
+    kinds.forEach(d => {
+      const [k, def] = defs[d], action = (opts[k] || def).toUpperCase();
+      m.flows.push({ id:m.flows.length, order:9999, scope:ctx.scope, file:ctx.file, line:null, raw:opts[k] ? `${k}: ${opts[k]}` : `${k} (default: ${def})`,
+        appliedIn:ctx.file, dir:d, src:d === "IN" ? world() : target, dst:d === "IN" ? target : world(), srcSpec:"", dstSpec:"",
+        svc:{ label:"default policy", short:"default", parts:[{ proto:"", ports:"" }], ranges:[{ proto:"", lo:0, hi:65535 }], sport:"" },
+        action, iface:"", group:"", state:ctx.fwOn ? "active" : "fw-off", why:ctx.fwOn ? "" : ctx.why, log:"", comment:"", policy:true, target });
+    });
+  }
+
+  // datacenter → all hosts
+  const cx = { scope:"Datacenter", file:"cluster.fw", local:null, fwOn:m.clusterOn, why:"Datacenter firewall disabled", counter:{ n:0 } };
+  if (files["firewall/cluster.fw"]) {
+    const t = clusterE();
+    cl.rules.forEach(r => addRule(r, t, cx));
+    addPolicy(t, cx, cl.options, ["IN", "OUT"]);
+  }
+  // hosts
+  m.nodes.forEach(node => {
+    const txt = files[`nodes/${node}/host.fw`]; if (txt == null) return;
+    const fw = parseFw(txt), on = m.clusterOn && fw.options.enable !== "0";
+    const t = hostE(node);
+    const ctx = { scope:"Host " + node, file:`nodes/${node}/host.fw`, local:null, fwOn:on, counter:{ n:0 },
+      why:!m.clusterOn ? "Datacenter firewall disabled" : "Host firewall disabled (enable: 0)" };
+    fw.rules.forEach(r => addRule(r, t, ctx));
+  });
+  // VM / CT
+  const fwIds = new Set();
+  Object.keys(files).sort((a, b) => a.localeCompare(b, undefined, { numeric:true })).forEach(k => {
+    const x = /^firewall\/(\d+)\.fw$/.exec(k); if (!x) return;
+    const vmid = x[1]; fwIds.add(vmid);
+    const fw = parseFw(files[k]); fw._owner = (m.guests[vmid] ? m.guests[vmid].type : "vm") + vmid;
+    const g = m.guests[vmid], enabled = fw.options.enable === "1";
+    const nicOk = !g || g.nics.length === 0 || g.nics.some(n => n.firewall);
+    const on = m.clusterOn && enabled && nicOk;
+    const t = guestE(vmid);
+    const why = !m.clusterOn ? "Datacenter firewall disabled" : (!enabled ? "Guest firewall disabled (enable: 0)" : "No interface has firewall=1");
+    if (m.clusterOn && enabled && !nicOk) alert(`${m.entities.get(t).title} (${vmid}): firewall enabled but no interface has firewall=1, so its rules are not enforced.`);
+    m.entities.get(t).fw = { enabled, nicOk, on, options:fw.options, file:k };
+    const ctx = { scope:m.entities.get(t).title, file:k, local:fw, fwOn:on, why, counter:{ n:0 } };
+    fw.rules.forEach(r => addRule(r, t, ctx));
+    addPolicy(t, ctx, fw.options, ["IN", "OUT"]);
+  });
+  // VNets (SDN firewall / nftables)
+  Object.keys(files).forEach(k => {
+    const x = /^sdn\/firewall\/(.+)\.fw$/.exec(k); if (!x) return;
+    const fw = parseFw(files[k]), on = m.clusterOn && fw.options.enable === "1";
+    const sn = m.sdn.subnets.filter(s => s.vnet === x[1]).map(s => s.cidr);
+    const t = E("vnetfw:" + x[1], { kind:"vnet", title:x[1], tag:"VNET", sub:sn.join(", ") || "VNet firewall", nets:sn });
+    const ctx = { scope:"VNet " + x[1], file:k, local:null, fwOn:on, vnet:true, counter:{ n:0 }, why:!m.clusterOn ? "Datacenter firewall disabled" : "VNet firewall disabled" };
+    fw.rules.forEach(r => addRule(r, t, ctx));
+  });
+
+  Object.values(m.guests).forEach(g => { if (!fwIds.has(g.vmid)) m.noFw.push(g); });
+  if (m.noFw.length) alert(`${m.noFw.length} guest(s) without a firewall file: ${m.noFw.slice(0, 6).map(g => (g.name || g.vmid) + " (" + g.vmid + ")").join(", ")}${m.noFw.length > 6 ? "…" : ""}.`);
+  return m;
+}
+
+/* ------------------------------------------------------------------ filters */
+const ent = id => M.entities.get(id === "world:out" ? "world" : id);
+function entMatch(e, v){
+  v = v.toLowerCase();
+  if ([e.title, e.tag, e.id, e.sub, e.vmid, e.node].some(x => x && String(x).toLowerCase().includes(v))) return true;
+  if (isAddr(v)) return ipMatch(e, v);
+  return false;
+}
+function ipMatch(e, q){
+  if (e.kind === "world") return true;
+  return [...e.ips, ...e.nets].some(n => overlap(n, q));
+}
+function portMatch(f, p, proto){
+  return f.svc.ranges.some(r => (!proto || !r.proto || r.proto === proto) && (p == null || (p >= r.lo && p <= r.hi)));
+}
+function chipMatch(c, f){
+  const s = ent(f.src), d = ent(f.dst), v = c.v;
+  switch (c.k) {
+    case "from": return entMatch(s, v);
+    case "to": return entMatch(d, v);
+    case "ip": return ipMatch(s, v) || ipMatch(d, v);
+    case "port": { const r = portRange(v); return !!r && f.svc.ranges.some(x => x.lo <= r[1] && x.hi >= r[0]); }
+    case "proto": return portMatch(f, null, v.toLowerCase());
+    case "node": return (s.node || "").toLowerCase() === v.toLowerCase() || (d.node || "").toLowerCase() === v.toLowerCase();
+    case "group": return f.group.toLowerCase().includes(v.toLowerCase());
+    case "scope": return f.scope.toLowerCase().includes(v.toLowerCase()) || f.file.toLowerCase().includes(v.toLowerCase());
+    case "action": return f.action.toLowerCase() === v.toLowerCase();
+    default: {
+      const t = v.toLowerCase();
+      return entMatch(s, v) || entMatch(d, v) || [f.svc.label, f.comment, f.scope, f.file, f.raw, f.group].some(x => x && x.toLowerCase().includes(t));
+    }
+  }
+}
+const KEYS = ["from", "to", "ip", "port", "proto", "node", "group", "scope", "action"];
+function toChip(text){
+  let t = text.trim(), neg = false;
+  if (/^[-!]./.test(t)) { neg = true; t = t.slice(1); }
+  const m = /^(\w+):(.+)$/.exec(t);
+  if (m && KEYS.includes(m[1].toLowerCase())) return { k:m[1].toLowerCase(), v:m[2], neg };
+  return { k:"", v:t, neg };
+}
+function portRange(v){
+  const m = /^(\d+)(?:[-:](\d+))?$/.exec(String(v).trim()) || (PORTNAMES[String(v).toLowerCase()] ? [0, PORTNAMES[String(v).toLowerCase()]] : null);
+  if (!m) return null; const lo = +m[1], hi = m[2] ? +m[2] : lo; return [Math.min(lo, hi), Math.max(lo, hi)];
+}
+const PROTO_ALIASES = { icmp:["icmp", "ipv6-icmp", "icmpv6"], icmpv6:["ipv6-icmp", "icmpv6"], "ipv6-icmp":["ipv6-icmp", "icmpv6"] };
+// Exclusion: hide a rule only when its whole service falls inside the excluded protocol / ports,
+// so "-port:53" hides DNS rules but keeps rules that allow every port.
+function chipExclude(c, f){
+  if (c.k === "port") { const r = portRange(c.v); return !!r && f.svc.ranges.length > 0 && f.svc.ranges.every(x => x.lo >= r[0] && x.hi <= r[1]); }
+  if (c.k === "proto") { const set = PROTO_ALIASES[c.v.toLowerCase()] || [c.v.toLowerCase()]; return f.svc.parts.every(p => p.proto && set.includes(p.proto)); }
+  return chipMatch(c, f);
+}
+function activeChips(){
+  const q = $("#q").value.trim();
+  return q ? [...S.chips, ...q.split(/\s+/).map(toChip)] : S.chips;
+}
+function computeVisible(){
+  const chips = activeChips();
+  return M.flows.filter(f => {
+    if (!S.showOff && f.state !== "active") return false;
+    if (!S.showPol && f.policy) return false;
+    if (S.verdict === "allow" && f.action !== "ACCEPT") return false;
+    if (S.verdict === "deny" && f.action === "ACCEPT") return false;
+    if (S.dir && f.dir !== S.dir) return false;
+    if (!S.showAny && (f.src === "world" || f.dst === "world")) return false;
+    if (S.node) {
+      const a = ent(f.src).node, b = ent(f.dst).node;
+      if (a !== S.node && b !== S.node && f.src !== "cluster" && f.dst !== "cluster") return false;
+    }
+    return chips.every(c => c.neg ? !chipExclude(c, f) : chipMatch(c, f));
+  });
+}
+const cls = f => f.state !== "active" ? "off" : (f.action === "ACCEPT" ? "allow" : "deny");
+
+/* ------------------------------------------------------------------ graph + layout */
+function buildGraph(flows){
+  const edges = new Map(), nodes = new Set(), ports = new Map();
+  flows.forEach(f => {
+    // "any" as a destination is its own card (on the right), like "world" in Hubble
+    f.gs = f.src; f.gd = f.dst === "world" && f.src !== "world" ? "world:out" : f.dst;
+    const c = cls(f), k = f.gs + "|" + f.gd + "|" + c;
+    if (!edges.has(k)) edges.set(k, { id:k, src:f.gs, dst:f.gd, cls:c, flows:[] });
+    edges.get(k).flows.push(f);
+    nodes.add(f.gs); nodes.add(f.gd);
+    if (!ports.has(f.gd)) ports.set(f.gd, new Map());
+    const pk = f.svc.short + "|" + c; if (!ports.get(f.gd).has(pk)) ports.get(f.gd).set(pk, { label:f.svc.short, cls:c });
+  });
+  const ids = [...nodes];
+  const pos = layout(ids, [...edges.values()]);
+  // offset parallel links between the same pair
+  const pair = new Map();
+  edges.forEach(e => { const k = e.src + "|" + e.dst; if (!pair.has(k)) pair.set(k, []); pair.get(k).push(e); });
+  pair.forEach(list => list.forEach((e, i) => e.off = (i - (list.length - 1) / 2) * 9));
+  return { ids, edges:[...edges.values()], pos, ports };
+}
+function layout(ids, edges){
+  const n = ids.length, idx = new Map(ids.map((x, i) => [x, i]));
+  const out = ids.map(() => []), seen = new Set();
+  edges.forEach(e => { if (e.src === e.dst) return; const k = e.src + ">" + e.dst; if (seen.has(k)) return; seen.add(k); out[idx.get(e.src)].push(idx.get(e.dst)); });
+  const inc = new Array(n).fill(0); out.forEach(l => l.forEach(v => inc[v]++));
+  const rank = i => KIND_RANK[ent(ids[i]).kind] ?? 5;
+  const roots = [...ids.keys()].sort((a, b) => (inc[a] - inc[b]) || (rank(a) - rank(b)));
+  const st = new Uint8Array(n), dag = ids.map(() => []);
+  for (const r of roots) {
+    if (st[r]) continue; st[r] = 1; const stack = [[r, 0]];
+    while (stack.length) {
+      const top = stack[stack.length - 1], u = top[0];
+      if (top[1] < out[u].length) { const v = out[u][top[1]++]; if (st[v] !== 1) { dag[u].push(v); if (!st[v]) { st[v] = 1; stack.push([v, 0]); } } }
+      else { st[u] = 2; stack.pop(); }
+    }
+  }
+  const L = new Array(n).fill(0), ind = new Array(n).fill(0); dag.forEach(l => l.forEach(v => ind[v]++));
+  const hasIn = ind.map(x => x > 0);
+  const q = [...ind.keys()].filter(i => !ind[i]);
+  while (q.length) { const u = q.shift(); for (const v of dag[u]) { L[v] = Math.max(L[v], L[u] + 1); if (--ind[v] === 0) q.push(v); } }
+  for (let u = 0; u < n; u++) if (!hasIn[u] && dag[u].length) L[u] = Math.max(L[u], Math.min(...dag[u].map(v => L[v])) - 1);
+  const maxL = Math.max(0, ...L);
+  if (maxL + 1 > MAXCOLS) for (let i = 0; i < n; i++) L[i] = Math.round(L[i] * (MAXCOLS - 1) / maxL);
+  const cols = []; L.forEach((l, i) => (cols[l] = cols[l] || []).push(i));
+  const order = new Array(n).fill(0);
+  cols.forEach(c => c && c.sort((a, b) => (rank(a) - rank(b)) || String(ent(ids[a]).node || "").localeCompare(String(ent(ids[b]).node || "")) || ent(ids[a]).title.localeCompare(ent(ids[b]).title)).forEach((u, i) => order[u] = i));
+  const nb = ids.map(() => []); out.forEach((l, u) => l.forEach(v => { nb[u].push(v); nb[v].push(u); }));
+  for (let it = 0; it < 6; it++) {
+    const seq = it % 2 ? [...cols].reverse() : cols;
+    seq.forEach(c => {
+      if (!c) return;
+      const bc = u => { const ns = nb[u].filter(v => L[v] !== L[u]); return ns.length ? ns.reduce((s, v) => s + order[v], 0) / ns.length : order[u]; };
+      c.sort((a, b) => bc(a) - bc(b)).forEach((u, i) => order[u] = i);
+    });
+  }
+  const pos = {}, maxLen = Math.max(1, ...cols.map(c => c ? c.length : 0));
+  cols.forEach((c, l) => { if (!c) return; const off = (maxLen - c.length) * (H + GY) / 2; c.forEach(u => pos[ids[u]] = { x:l * (W + GX), y:off + order[u] * (H + GY), col:l }); });
+  return pos;
+}
+
+/* ------------------------------------------------------------------ map rendering */
+const NS = "http://www.w3.org/2000/svg";
+function edgePath(e){
+  const a = G.pos[e.src], b = G.pos[e.dst], off = e.off || 0;
+  if (e.src === e.dst) { const x = a.x + W - 34, y = a.y; return `M${x},${y} C${x},${y - 46} ${x + 56},${y - 46} ${x + 34},${y + 14}`; }
+  const x1 = a.x + W, y1 = a.y + H / 2 + off, x2 = b.x - 2, y2 = b.y + H / 2 + off;
+  if (b.x > a.x) { const dx = Math.max(50, (x2 - x1) / 2); return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`; }
+  const yb = Math.max(a.y, b.y) + H + 26 + Math.abs(off) * 2, mx = (x1 + x2) / 2;
+  return `M${x1},${y1} C${x1 + 70},${y1} ${x1 + 70},${yb} ${mx},${yb} S${x2 - 70},${y2} ${x2},${y2}`;
+}
+function drawMap(){
+  const gE = $("#gEdges"), gC = $("#gCards");
+  gE.textContent = ""; gC.textContent = ""; $("#gLabels").textContent = "";
+  const empty = $("#empty");
+  if (!G.ids.length) { empty.hidden = false; empty.textContent = M.flows.length ? "No rule matches the filters." : "This bundle contains no rules."; }
+  else empty.hidden = true;
+  let eh = "";
+  G.edges.forEach(e => {
+    const w = 1.5 + Math.min(2.5, Math.log2(e.flows.length + 1) * .8);
+    const tip = `${ent(e.src).title} → ${ent(e.dst).title}\n` + [...new Set(e.flows.map(f => f.svc.label))].join("\n");
+    eh += `<g class="edge ${e.cls}" data-e="${esc(e.id)}"><path class="ln" d="${edgePath(e)}" stroke-width="${w.toFixed(2)}" marker-end="url(#m-${e.cls})"/><path class="hit" d="${edgePath(e)}"><title>${esc(tip)}</title></path></g>`;
+  });
+  gE.innerHTML = eh;
+  let ch = "";
+  G.ids.forEach(id => {
+    const e = ent(id), p = G.pos[id];
+    const dot = e.status ? `<circle class="dot ${e.status === "running" ? "running" : "stopped"}" cx="${W - 14}" cy="15" r="4"><title>${esc(e.status)}</title></circle>` : "";
+    let chips = "", x = 12, hidden = 0;
+    const list = [...(G.ports.get(id) || new Map()).values()].sort((a, b) => ({ allow:0, deny:1, off:2 }[a.cls] - { allow:0, deny:1, off:2 }[b.cls]));
+    list.forEach((c, i) => {
+      const label = trunc(c.label, 16), w = label.length * 6.1 + 10;
+      if (x + w > W - 34 && i < list.length) { hidden++; return; }
+      chips += `<g class="pc ${c.cls}"><rect x="${x}" y="68" width="${w.toFixed(1)}" height="16" rx="3"/><text x="${(x + 5).toFixed(1)}" y="79.5">${esc(label)}</text></g>`;
+      x += w + 4;
+    });
+    if (hidden) chips += `<text class="more" x="${W - 30}" y="79.5">+${hidden}</text>`;
+    ch += `<g class="card k-${e.kind}" data-n="${esc(id)}" transform="translate(${p.x},${p.y})">
+      <rect class="body" width="${W}" height="${H}" rx="9"/>
+      <text class="tg" x="12" y="19">${esc(trunc(id === "world:out" ? "WORLD · destination" : (id === "world" ? "WORLD · source" : e.tag), 34))}</text>${dot}
+      <text class="tt" x="12" y="40">${esc(trunc(e.title, 26))}</text>
+      <text class="sb" x="12" y="57">${esc(trunc(e.sub, 36))}</text>${chips}
+      <title>${esc(e.title + "\n" + e.tag + "\n" + (e.sub || ""))}</title></g>`;
+  });
+  gC.innerHTML = ch;
+  $("#mapstat").textContent = `${G.ids.length} objects · ${G.edges.length} links`;
+  applySelectionClasses();
+}
+function applyView(){ const v = S.view; $("#vp").setAttribute("transform", `translate(${v.x},${v.y}) scale(${v.k})`); }
+function fit(){
+  const svg = $("#map"), r = svg.getBoundingClientRect();
+  if (!G || !G.ids.length || !r.width) { S.view = { x:20, y:20, k:1 }; applyView(); return; }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  G.ids.forEach(id => { const p = G.pos[id]; x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y - 50); x1 = Math.max(x1, p.x + W); y1 = Math.max(y1, p.y + H + 60); });
+  const pad = 40, k = Math.min(1.1, Math.max(.15, Math.min((r.width - pad * 2) / (x1 - x0), (r.height - pad * 2) / (y1 - y0))));
+  S.view = { k, x:(r.width - (x1 - x0) * k) / 2 - x0 * k, y:(r.height - (y1 - y0) * k) / 2 - y0 * k };
+  applyView();
+}
+function zoomAt(f, cx, cy){
+  const v = S.view, k = Math.min(2.5, Math.max(.12, v.k * f)), r = k / v.k;
+  S.view = { k, x:cx - (cx - v.x) * r, y:cy - (cy - v.y) * r }; applyView();
+}
+
+/* ------------------------------------------------------------------ selection */
+function selectionFlows(){
+  if (!S.sel) return VIS;
+  if (S.sel.t === "n") return VIS.filter(f => f.gs === S.sel.id || f.gd === S.sel.id);
+  if (S.sel.t === "e") { const e = G.edges.find(x => x.id === S.sel.id); return e ? e.flows : []; }
+  if (S.sel.t === "f") { const f = M.flows[S.sel.id]; const e = G.edges.find(x => x.flows.includes(f)); return e ? e.flows : [f]; }
+  return VIS;
+}
+function applySelectionClasses(){
+  const sel = S.sel; let nodes = null, edges = null;
+  if (sel && sel.t === "n") {
+    nodes = new Set([sel.id]); edges = new Set();
+    G.edges.forEach(e => { if (e.src === sel.id || e.dst === sel.id) { edges.add(e.id); nodes.add(e.src); nodes.add(e.dst); } });
+  } else if (sel && (sel.t === "e" || sel.t === "f")) {
+    const e = sel.t === "e" ? G.edges.find(x => x.id === sel.id) : G.edges.find(x => x.flows.some(f => f.id === sel.id));
+    if (e) { edges = new Set([e.id]); nodes = new Set([e.src, e.dst]); }
+  }
+  document.querySelectorAll("#gCards .card").forEach(c => { const id = c.dataset.n; c.classList.toggle("dim", !!nodes && !nodes.has(id)); c.classList.toggle("sel", !!sel && sel.t === "n" && sel.id === id); });
+  document.querySelectorAll("#gEdges .edge").forEach(g => { const id = g.dataset.e; g.classList.toggle("dim", !!edges && !edges.has(id)); g.classList.toggle("sel", !!edges && edges.has(id) && sel.t !== "n"); });
+  // port label on the selected link
+  const gl = $("#gLabels"); gl.textContent = "";
+  if (edges && sel.t !== "n") edges.forEach(id => {
+    const e = G.edges.find(x => x.id === id); if (!e || e.src === e.dst) return;
+    const a = G.pos[e.src], b = G.pos[e.dst];
+    const txt = trunc([...new Set(e.flows.map(f => f.svc.short))].join(", "), 40), w = txt.length * 6.4 + 14;
+    const mx = b.x > a.x ? (a.x + W + b.x) / 2 : (a.x + W + b.x) / 2, my = b.x > a.x ? (a.y + b.y) / 2 + H / 2 + (e.off || 0) : Math.max(a.y, b.y) + H + 26;
+    gl.insertAdjacentHTML("beforeend", `<g class="edge lbl-g"><g class="lbl"><rect x="${mx - w / 2}" y="${my - 10}" width="${w}" height="20" rx="4"/><text x="${mx - w / 2 + 7}" y="${my + 4}">${esc(txt)}</text></g></g>`);
+  });
+}
+function setSel(sel){ S.sel = sel; applySelectionClasses(); renderSide(); renderTable(); }
+
+/* ------------------------------------------------------------------ side panel */
+const verdictLabel = a => a === "ACCEPT" ? "Allowed" : (a === "DROP" ? "Dropped" : (a === "REJECT" ? "Rejected" : a));
+const pill = f => f.state !== "active" ? `<span class="pill off">${esc(verdictLabel(f.action))} · inactive</span>` : `<span class="pill ${esc(f.action)}">${esc(verdictLabel(f.action))}</span>`;
+function entDetails(e){
+  const rows = [["Type", e.tag]];
+  if (e.node) rows.push(["Node", e.node]);
+  if (e.ips.length) rows.push(["IP", e.ips.join(", ")]);
+  if (e.kind === "ipset") rows.push(["Members", e.members.map(x => x.raw + (x.alias ? " → " + x.value : "")).join(", ") || "empty"]);
+  else if (e.nets.length && e.kind !== "world") rows.push(["Addresses", e.nets.join(", ")]);
+  if (e.neg) rows.push(["Negation", "everything except these addresses"]);
+  if (e.comment) rows.push(["Comment", e.comment]);
+  if (e.status) rows.push(["Status", e.status]);
+  if (e.fw) {
+    rows.push(["Firewall", e.fw.on ? "enforced" : (!e.fw.enabled ? "disabled (enable: 0)" : (!e.fw.nicOk ? "no interface with firewall=1" : "datacenter firewall disabled"))]);
+    rows.push(["Policy", `IN ${e.fw.options.policy_in || "DROP"} · OUT ${e.fw.options.policy_out || "ACCEPT"}`]);
+  }
+  if (e.vmid && M.guests[e.vmid]) {
+    const nics = M.guests[e.vmid].nics.map(n => `${n.id} ${n.bridge}${n.tag ? "." + n.tag : ""} fw=${n.firewall ? 1 : 0}`).join(" · ");
+    if (nics) rows.push(["Interfaces", nics]);
+  }
+  return `<dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
+}
+function peers(id){
+  const inb = new Map(), outb = new Map();
+  VIS.forEach(f => {
+    if (f.gd === id && f.gs !== id) { const k = f.gs; if (!inb.has(k)) inb.set(k, []); inb.get(k).push(f); }
+    if (f.gs === id && f.gd !== id) { const k = f.gd; if (!outb.has(k)) outb.set(k, []); outb.get(k).push(f); }
+  });
+  const li = (map) => [...map.entries()].map(([k, fs]) => {
+    const c = fs.some(f => cls(f) === "allow") ? "ACCEPT" : (fs.some(f => cls(f) === "deny") ? "DROP" : "off");
+    return `<li class="clk" data-goto="${esc(k)}"><span><span class="pill ${c}" style="margin-right:6px">${c === "ACCEPT" ? "✓" : (c === "off" ? "–" : "✕")}</span>${esc(ent(k).title)}</span><span class="m">${esc(trunc([...new Set(fs.map(f => f.svc.short))].join(", "), 40))}</span></li>`;
+  }).join("");
+  return { inb:li(inb), outb:li(outb), nIn:inb.size, nOut:outb.size };
+}
+function renderSide(){
+  const side = $("#side");
+  if (!M) { side.innerHTML = ""; return; }
+  const sel = S.sel;
+  if (!sel) {
+    const act = M.flows.filter(f => !f.policy);
+    const a = act.filter(f => f.state === "active" && f.action === "ACCEPT").length, d = act.filter(f => f.state === "active" && f.action !== "ACCEPT").length, o = act.filter(f => f.state !== "active").length;
+    const guestsFw = Object.keys(M.guests).length - M.noFw.length;
+    side.innerHTML = `
+      <div><div class="eyebrow">Overview</div><h2>${esc((M.bundle.meta || {}).cluster || "Imported bundle")}</h2></div>
+      <div class="stats">
+        <div class="stat allow"><b>${a}</b><span>allow rules</span></div>
+        <div class="stat deny"><b>${d}</b><span>block rules</span></div>
+        <div class="stat"><b>${o}</b><span>inactive rules</span></div>
+        <div class="stat"><b>${guestsFw}/${Object.keys(M.guests).length}</b><span>guests with a firewall file</span></div>
+      </div>
+      <dl class="kv">
+        <dt>Datacenter</dt><dd>${M.clusterOn ? "firewall enabled" : "<span class='pill warn'>firewall disabled</span>"}</dd>
+        <dt>Policy</dt><dd>IN ${esc(M.cluster.options.policy_in || "DROP")} · OUT ${esc(M.cluster.options.policy_out || "ACCEPT")}</dd>
+        <dt>Nodes</dt><dd>${esc(M.nodes.join(", ") || "—")}</dd>
+        <dt>Objects</dt><dd>${Object.keys(M.cluster.aliases).length} aliases · ${Object.keys(M.cluster.ipsets).length} IPSets · ${Object.keys(M.cluster.groups).length} groups</dd>
+      </dl>
+      ${M.alerts.length ? `<div><h3>Findings (${M.alerts.length})</h3><ul class="list alerts">${M.alerts.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
+      <div class="hint">Click a card to see its inbound and outbound flows, a link to list its rules, or a table row for the full detail of one rule.<br><br>
+      Filters: <code>from:web</code> <code>to:pg-primary</code> <code>port:5432</code> <code>proto:udp</code> <code>ip:10.10.0.0/24</code> <code>node:pve1</code> <code>group:db</code> <code>action:drop</code>. Prefix with <code>-</code> to exclude: <code>-proto:icmp</code> <code>-port:53</code> <code>-from:any</code>. <kbd>Enter</kbd> pins a filter, <kbd>/</kbd> jumps to the filter box, <kbd>Esc</kbd> clears the selection.</div>`;
+    return;
+  }
+  if (sel.t === "n") {
+    const e = ent(sel.id), p = peers(sel.id);
+    const q = e.vmid ? e.title : (e.kind === "world" ? "any" : e.title);
+    side.innerHTML = `
+      <div><div class="eyebrow">${esc(e.tag)}</div><h2>${esc(e.title)}</h2></div>
+      ${entDetails(e)}
+      <div class="row-btns">
+        <button class="btn small" data-chip="to:${esc(q)}">Filter to</button>
+        <button class="btn small" data-chip="from:${esc(q)}">Filter from</button>
+        <button class="btn small" data-act="clear">Close</button>
+      </div>
+      <div><h3>Inbound · ${p.nIn} source(s)</h3><ul class="list">${p.inb || "<li class='hint'>No visible inbound flow.</li>"}</ul></div>
+      <div><h3>Outbound · ${p.nOut} destination(s)</h3><ul class="list">${p.outb || "<li class='hint'>No visible outbound flow.</li>"}</ul></div>`;
+    return;
+  }
+  if (sel.t === "e") {
+    const e = G.edges.find(x => x.id === sel.id); if (!e) { S.sel = null; return renderSide(); }
+    side.innerHTML = `
+      <div><div class="eyebrow">Link · ${e.cls === "allow" ? "allowed" : (e.cls === "deny" ? "blocked" : "inactive")}</div>
+      <h2><span class="clk" data-goto="${esc(e.src)}">${esc(ent(e.src).title)}</span> <span class="arrow">→</span> <span data-goto="${esc(e.dst)}">${esc(ent(e.dst).title)}</span></h2></div>
+      <div><h3>${e.flows.length} rule(s)</h3><ul class="list">${e.flows.map(f => `<li class="clk" data-flow="${f.id}"><span>${pill(f)} ${esc(f.svc.label)}</span><span class="m">${esc(f.file)}${f.line ? ":" + f.line : ""}</span></li>`).join("")}</ul></div>
+      <div class="row-btns"><button class="btn small" data-act="clear">Close</button></div>`;
+    return;
+  }
+  const f = M.flows[sel.id];
+  const s = ent(f.src), d = ent(f.dst);
+  side.innerHTML = `
+    <div><div class="eyebrow">Rule · ${esc(f.dir)} · ${esc(f.scope)}</div><h2>${esc(f.svc.label)}</h2></div>
+    <div>${pill(f)}${f.why ? ` <span class="hint">${esc(f.why)}</span>` : ""}</div>
+    <dl class="kv">
+      <dt>Source</dt><dd><a href="#" data-goto="${esc(f.gs || f.src)}">${esc(s.title)}</a>${f.srcSpec ? ` <span class="mono hint">${esc(f.srcSpec)}</span>` : ""}<br><span class="hint">${esc(s.kind === "world" ? "all addresses" : [...s.ips, ...s.nets].join(", "))}</span></dd>
+      <dt>Destination</dt><dd><a href="#" data-goto="${esc(f.gd || f.dst)}">${esc(d.title)}</a>${f.dstSpec ? ` <span class="mono hint">${esc(f.dstSpec)}</span>` : ""}<br><span class="hint">${esc(d.kind === "world" ? "all addresses" : [...d.ips, ...d.nets].join(", "))}</span></dd>
+      <dt>Service</dt><dd class="mono">${esc(f.svc.parts.map(p => (p.proto || "any") + (p.ports ? " " + p.ports : "")).join(" · "))}${f.svc.sport ? " (sport " + esc(f.svc.sport) + ")" : ""}</dd>
+      ${f.iface ? `<dt>Interface</dt><dd class="mono">${esc(f.iface)}</dd>` : ""}
+      ${f.group ? `<dt>Group</dt><dd>${esc(f.group)} <span class="hint">called on line ${f.groupLine} of ${esc(f.appliedIn)}</span></dd>` : ""}
+      <dt>File</dt><dd class="mono">${esc(f.file)}${f.line ? ":" + f.line : ""}</dd>
+      <dt>Position</dt><dd>${f.policy ? "policy, applied after all rules" : "#" + f.order + " in the " + esc(f.scope) + " chain"}</dd>
+      ${f.log ? `<dt>Log</dt><dd>${esc(f.log)}</dd>` : ""}
+      ${f.comment ? `<dt>Comment</dt><dd>${esc(f.comment)}</dd>` : ""}
+    </dl>
+    <div><h3>Source line</h3><div class="raw">${esc(f.raw)}</div>${f.groupRaw ? `<div class="raw" style="margin-top:6px">${esc(f.appliedIn)}: ${esc(f.groupRaw)}</div>` : ""}</div>
+    <div class="row-btns"><button class="btn small" data-act="clear">Close</button></div>`;
+}
+
+/* ------------------------------------------------------------------ table */
+const COLS = [
+  { k:"verdict", t:"Verdict", v:f => verdictLabel(f.action) + (f.state !== "active" ? " (inactive)" : ""), h:f => pill(f) },
+  { k:"dir", t:"Dir", v:f => f.dir },
+  { k:"src", t:"Source", v:f => ent(f.src).title },
+  { k:"dst", t:"Destination", v:f => ent(f.dst).title },
+  { k:"svc", t:"Service", v:f => f.svc.label, mono:true },
+  { k:"scope", t:"Scope", v:f => f.scope },
+  { k:"order", t:"#", v:f => f.policy ? 9999 : f.order, h:f => f.policy ? "pol." : String(f.order) },
+  { k:"iface", t:"Interface", v:f => f.iface, mono:true },
+  { k:"group", t:"Group", v:f => f.group },
+  { k:"state", t:"State", v:f => f.state === "active" ? "enforced" : f.why },
+  { k:"file", t:"File", v:f => f.file + (f.line ? ":" + f.line : ""), mono:true },
+  { k:"comment", t:"Comment", v:f => f.comment, cm:true },
+];
+function sortedRows(){
+  const rows = selectionFlows().slice(), c = COLS.find(x => x.k === S.sort.col);
+  if (c) rows.sort((a, b) => {
+    let x = c.v(a), y = c.v(b);
+    let r = typeof x === "number" ? x - y : String(x).localeCompare(String(y), "en", { numeric:true });
+    if (!r) r = a.scope.localeCompare(b.scope, "en") || ((a.policy ? 9999 : a.order) - (b.policy ? 9999 : b.order));
+    return S.sort.asc ? r : -r;
+  });
+  return rows;
+}
+function renderHead(){
+  $("#tbl thead tr").innerHTML = COLS.map(c => `<th data-k="${c.k}"${S.sort.col === c.k ? ` aria-sort="${S.sort.asc ? "ascending" : "descending"}"` : ""}>${esc(c.t)}</th>`).join("");
+}
+function renderTable(){
+  renderHead();
+  const rows = sortedRows(), LIM = 1500;
+  const selF = S.sel && S.sel.t === "f" ? S.sel.id : null;
+  $("#tbl tbody").innerHTML = rows.slice(0, LIM).map(f => `<tr data-flow="${f.id}" class="${f.state !== "active" ? "inactive" : ""}${f.id === selF ? " on" : ""}">${COLS.map(c => `<td class="${c.mono ? "mono" : ""}${c.cm ? " cm" : ""}">${c.h ? c.h(f) : esc(c.v(f))}</td>`).join("")}</tr>`).join("");
+  $("#cnt").textContent = `${rows.length} shown${rows.length > LIM ? `, first ${LIM} listed` : ""} · ${M.flows.length} total`;
+  const s = S.sel;
+  $("#selInfo").innerHTML = s ? `<span class="chip"><i>selection</i> ${esc(s.t === "n" ? ent(s.id).title : (s.t === "e" ? ent(G.edges.find(x => x.id === s.id)?.src || "world").title + " → " + ent(G.edges.find(x => x.id === s.id)?.dst || "world").title : "rule"))}<button type="button" data-act="clear" aria-label="Clear selection">×</button></span>` : "";
+}
+
+/* ------------------------------------------------------------------ render cycle */
+function renderChips(){
+  try { localStorage.setItem("pvefe.chips", JSON.stringify(S.chips)); } catch (e) {}
+  $("#chips").innerHTML = S.chips.map((c, i) => `<span class="chip${c.neg ? " neg" : ""}" title="${c.neg ? "Excluded" : "Filter"}">${c.neg ? "<i>not</i> " : ""}${c.k ? `<i>${esc(c.k)}:</i>` : ""}${esc(c.v)}<button type="button" data-rm="${i}" aria-label="Remove filter">×</button></span>`).join("");
+}
+function refresh(keepView){
+  if (!M) return;
+  VIS = computeVisible();
+  G = buildGraph(VIS);
+  if (S.sel && S.sel.t === "n" && !G.ids.includes(S.sel.id)) S.sel = null;
+  if (S.sel && S.sel.t === "e" && !G.edges.some(e => e.id === S.sel.id)) S.sel = null;
+  drawMap();
+  const key = G.ids.join(",");
+  if (!keepView || key !== S.layoutKey) fit();
+  S.layoutKey = key;
+  renderSide(); renderTable();
+}
+function loadBundle(bundle, opts = {}){
+  try {
+    M = buildModel(bundle);
+  } catch (err) { showBanner("Cannot read this bundle: " + err.message); return false; }
+  S.isDemo = !!opts.demo; S.sel = null;
+  const meta = bundle.meta || {};
+  const nFw = Object.keys(bundle.files || {}).filter(k => k.endsWith(".fw")).length;
+  const when = meta.generated ? new Date(meta.generated).toLocaleString("en-GB", { dateStyle:"medium", timeStyle:"short" }) : "";
+  $("#ds").innerHTML = (S.isDemo ? `<span class="tagdemo">Sample data</span> ` : "") + `<b>${esc(meta.cluster || opts.name || "bundle")}</b>${when ? " · exported " + esc(when) : ""} · ${nFw} .fw files`;
+  $("#node").innerHTML = `<option value="">All nodes</option>` + M.nodes.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  S.node = "";
+  hideBanner();
+  refresh(false);
+  return true;
+}
+function showBanner(t, info){ const b = $("#banner"); b.textContent = t; b.className = "banner" + (info ? " info" : ""); b.hidden = false; }
+function hideBanner(){ $("#banner").hidden = true; }
+
+/* ------------------------------------------------------------------ import */
+async function importFiles(fileList){
+  const files = [...fileList]; if (!files.length) return;
+  const texts = await Promise.all(files.map(f => f.text().then(t => ({ name:f.name, text:t }))));
+  const json = texts.find(t => /\.json$/i.test(t.name) || t.text.trim().startsWith("{"));
+  if (json) {
+    let b; try { b = JSON.parse(json.text); } catch (e) { showBanner(`"${json.name}" is not valid JSON: ${e.message}`); return; }
+    if (!b.files || typeof b.files !== "object") { showBanner(`"${json.name}" is not a pve_fw_export.py bundle (no "files" key).`); return; }
+    if (loadBundle(b, { name:json.name })) persist(b);
+    return;
+  }
+  // raw .fw files dropped directly
+  const b = { format:"pve-fw-raw", version:1, meta:{ cluster:"imported .fw files", generated:new Date().toISOString() }, nodes:[], files:{}, guests:{} };
+  texts.forEach(t => {
+    const n = t.name.replace(/^.*[\\/]/, "");
+    if (/^cluster\.fw$/i.test(n)) b.files["firewall/cluster.fw"] = t.text;
+    else if (/^\d+\.fw$/.test(n)) b.files["firewall/" + n] = t.text;
+    else if (/^host\.fw$/i.test(n)) b.files["nodes/host/host.fw"] = t.text;
+    else if (/\.fw$/i.test(n)) b.files["nodes/" + n.replace(/\.fw$/i, "") + "/host.fw"] = t.text;
+  });
+  if (!Object.keys(b.files).length) { showBanner("No recognised file. Import the JSON bundle produced by pve_fw_export.py, or .fw files."); return; }
+  loadBundle(b, { name:".fw files" });
+  showBanner(".fw files imported without guest configs: IP addresses are not mapped to VMs. Use the JSON bundle for the full picture.", true);
+}
+function persist(b){ try { const s = JSON.stringify(b); if (s.length < 4.5e6) localStorage.setItem("pvefe.bundle", s); } catch (e) {} }
+function restore(){ try { const s = localStorage.getItem("pvefe.bundle"); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+
+/* ------------------------------------------------------------------ events */
+function addChip(text){ text.split(/\s+/).filter(Boolean).forEach(t => S.chips.push(toChip(t))); renderChips(); refresh(true); }
+$("#btnImport").onclick = () => $("#file").click();
+$("#file").onchange = e => { importFiles(e.target.files); e.target.value = ""; };
+$("#btnDemo").onclick = () => { if (DEMO) loadBundle(DEMO, { demo:true }); };
+$("#tokbox").onclick = e => { const rm = e.target.closest("[data-rm]"); if (rm) { S.chips.splice(+rm.dataset.rm, 1); renderChips(); refresh(true); return; } $("#q").focus(); };
+let qTimer;
+$("#q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => refresh(true), 140); });
+$("#q").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.value.trim()) { const v = e.target.value; e.target.value = ""; addChip(v); }
+  else if (e.key === "Backspace" && !e.target.value && S.chips.length) { S.chips.pop(); renderChips(); refresh(true); }
+});
+$("#verdict").onclick = e => { const b = e.target.closest("button"); if (!b) return; S.verdict = b.dataset.v; [...$("#verdict").children].forEach(x => x.setAttribute("aria-pressed", x === b)); refresh(true); };
+$("#node").onchange = e => { S.node = e.target.value; refresh(true); };
+$("#hide").onchange = e => { const v = e.target.value; e.target.value = ""; if (v && !S.chips.some(c => c.neg && "-" + c.k + ":" + c.v === v)) addChip(v); };
+$("#dir").onchange = e => { S.dir = e.target.value; refresh(true); };
+$("#tOff").onchange = e => { S.showOff = e.target.checked; refresh(true); };
+$("#tPol").onchange = e => { S.showPol = e.target.checked; refresh(true); };
+$("#tAny").onchange = e => { S.showAny = e.target.checked; refresh(true); };
+$("#zIn").onclick = () => { const r = $("#map").getBoundingClientRect(); zoomAt(1.25, r.width / 2, r.height / 2); };
+$("#zOut").onclick = () => { const r = $("#map").getBoundingClientRect(); zoomAt(.8, r.width / 2, r.height / 2); };
+$("#zFit").onclick = fit;
+
+const svg = $("#map");
+svg.addEventListener("wheel", e => { e.preventDefault(); const r = svg.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * .0015), e.clientX - r.left, e.clientY - r.top); }, { passive:false });
+let drag = null;
+svg.addEventListener("pointerdown", e => { drag = { x:e.clientX, y:e.clientY, vx:S.view.x, vy:S.view.y, moved:false }; svg.setPointerCapture(e.pointerId); });
+svg.addEventListener("pointermove", e => {
+  if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+  drag.moved = true; svg.classList.add("dragging"); S.view.x = drag.vx + dx; S.view.y = drag.vy + dy; applyView();
+});
+svg.addEventListener("pointerup", e => {
+  const d = drag; drag = null; svg.classList.remove("dragging");
+  if (!d || d.moved) return;
+  const t = document.elementFromPoint(e.clientX, e.clientY);
+  const card = t && t.closest(".card"), edge = t && t.closest(".edge[data-e]");
+  if (card) setSel(S.sel && S.sel.t === "n" && S.sel.id === card.dataset.n ? null : { t:"n", id:card.dataset.n });
+  else if (edge) setSel({ t:"e", id:edge.dataset.e });
+  else if (S.sel) setSel(null);
+});
+document.addEventListener("click", e => {
+  const g = e.target.closest("[data-goto]"); if (g && !e.target.closest("#map")) { e.preventDefault(); setSel({ t:"n", id:g.dataset.goto }); return; }
+  const fl = e.target.closest("[data-flow]"); if (fl && !e.target.closest("#map")) { setSel({ t:"f", id:+fl.dataset.flow }); return; }
+  const c = e.target.closest("[data-chip]"); if (c) { addChip(c.dataset.chip.replace(/\s+/g, "_").replace(/^(\w+):_?/, "$1:")); return; }
+  const a = e.target.closest("[data-act='clear']"); if (a) { setSel(null); return; }
+});
+$("#tbl thead").onclick = e => { const th = e.target.closest("th"); if (!th) return; const k = th.dataset.k; S.sort = { col:k, asc:S.sort.col === k ? !S.sort.asc : true }; renderTable(); };
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && S.sel) setSel(null);
+  if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); }
+});
+$("#btnCopy").onclick = async () => {
+  const rows = sortedRows();
+  const q = v => /[;"\n]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : v;
+  const csv = [COLS.map(c => c.t).join(";"), ...rows.map(f => COLS.map(c => q(String(c.v(f) ?? ""))).join(";"))].join("\n");
+  try { await navigator.clipboard.writeText(csv); $("#btnCopy").textContent = `${rows.length} rows copied`; setTimeout(() => $("#btnCopy").textContent = "Copy as CSV", 1800); }
+  catch (err) {
+    $("#side").insertAdjacentHTML("afterbegin", `<div><h3>CSV · select and copy</h3><textarea class="copy" id="csvOut" readonly></textarea></div>`);
+    const ta = $("#csvOut"); ta.value = csv; ta.focus(); ta.select();
+  }
+};
+// drag-and-drop and paste
+let dragDepth = 0;
+window.addEventListener("dragenter", e => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragDepth++; $("#drop").hidden = false; } });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("#drop").hidden = true; } });
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; $("#drop").hidden = true; if (e.dataTransfer?.files?.length) importFiles(e.dataTransfer.files); });
+window.addEventListener("paste", e => {
+  if (document.activeElement === $("#q")) return;
+  const t = e.clipboardData?.getData("text") || "";
+  if (t.trim().startsWith("{")) { try { const b = JSON.parse(t); if (b.files && loadBundle(b, { name:"pasted" })) persist(b); } catch (err) { showBanner("The pasted text is not a valid JSON bundle."); } }
+});
+window.addEventListener("resize", () => { clearTimeout(window.__rz); window.__rz = setTimeout(fit, 150); });
+
+/* ------------------------------------------------------------------ boot */
+try { const c = JSON.parse(localStorage.getItem("pvefe.chips") || "[]"); if (Array.isArray(c)) S.chips = c.filter(x => x && typeof x.v === "string"); } catch (e) {}
+renderChips();
+(() => {
+  const saved = restore();
+  if (saved && loadBundle(saved, { name:"last import" })) return;
+  if (DEMO) loadBundle(DEMO, { demo:true });
+})();
+</script>
+
+</body>
+</html>

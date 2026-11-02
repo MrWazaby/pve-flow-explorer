@@ -1,0 +1,39 @@
+[OPTIONS]
+enable: 1
+policy_in: DROP
+
+[ALIASES]
+admin_net 192.168.10.0/24 # admin workstations
+vpn_users 172.16.0.0/16 # WireGuard VPN
+backup_srv 10.20.0.5 # Proxmox Backup Server
+
+[IPSET monitoring] # Prometheus + Zabbix
+10.10.0.50
+10.10.0.51
+
+[IPSET dbservers]
+10.10.0.21
+10.10.0.22
+
+[IPSET frontends]
+10.10.0.11
+10.10.0.12
+
+[RULES]
+IN SSH(ACCEPT) -source admin_net -log nolog # admin SSH
+IN ACCEPT -source vpn_users -p tcp -dport 8006 # Proxmox web UI
+IN ACCEPT -source +monitoring -p tcp -dport 9100 # node_exporter
+IN ACCEPT -source backup_srv -p tcp -dport 8007
+IN Ping(ACCEPT) -source admin_net
+IN DROP -p tcp -dport 22 -log warning
+|IN ACCEPT -p tcp -dport 3128 # legacy proxy
+
+[group web] # web servers
+IN HTTP(ACCEPT)
+IN HTTPS(ACCEPT)
+IN ACCEPT -source +monitoring -p tcp -dport 9100
+
+[group db] # databases
+IN PostgreSQL(ACCEPT) -source +frontends
+IN ACCEPT -source +monitoring -p tcp -dport 9187
+IN REJECT -p tcp -dport 3306

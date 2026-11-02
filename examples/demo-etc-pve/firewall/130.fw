@@ -1,0 +1,8 @@
+[OPTIONS]
+enable: 1
+
+[RULES]
+IN Ping(ACCEPT)
+IN DNS(ACCEPT) -source 10.10.0.0/24
+OUT DNS(ACCEPT)
+IN ACCEPT -source +monitoring -p tcp -dport 9100

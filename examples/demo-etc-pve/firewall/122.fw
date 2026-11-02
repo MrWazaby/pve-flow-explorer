@@ -1,0 +1,6 @@
+[OPTIONS]
+enable: 1
+
+[RULES]
+GROUP db
+OUT ACCEPT -dest 10.10.0.21 -p tcp -dport 5432 # replication

@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+# real exports may contain your network layout: keep them out of the repo
+pve-fw-*.json
+_site/

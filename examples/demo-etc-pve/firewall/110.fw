@@ -1,0 +1,8 @@
+[OPTIONS]
+enable: 1
+
+[RULES]
+IN HTTPS(ACCEPT)
+IN HTTP(ACCEPT)
+IN ACCEPT -source admin_net -p tcp -dport 8404 # HAProxy stats
+OUT ACCEPT -dest +frontends -p tcp -dport 80,443

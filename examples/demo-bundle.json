@@ -1,0 +1,159 @@
+{
+ "format": "pve-fw-raw",
+ "version": 1,
+ "meta": {
+  "cluster": "prod-lyon",
+  "host": "pve1",
+  "generated": "2026-11-02T09:41:00+01:00",
+  "pveVersion": "pve-manager/8.4.1",
+  "source": "/etc/pve"
+ },
+ "nodes": [
+  "pve1",
+  "pve2"
+ ],
+ "files": {
+  "firewall/101.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nIN Ping(ACCEPT) -source 10.10.0.0/24\nGROUP web -i net0\nOUT ACCEPT -dest +dbservers -p tcp -dport 5432\nOUT DNS(ACCEPT) -dest 10.10.0.2\n|IN SSH(ACCEPT) # debug\n",
+  "firewall/102.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nGROUP web -i net0\nOUT ACCEPT -dest +dbservers -p tcp -dport 5432\nOUT DNS(ACCEPT) -dest 10.10.0.2\n",
+  "firewall/110.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nIN HTTPS(ACCEPT)\nIN HTTP(ACCEPT)\nIN ACCEPT -source admin_net -p tcp -dport 8404 # HAProxy stats\nOUT ACCEPT -dest +frontends -p tcp -dport 80,443\n",
+  "firewall/121.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nGROUP db\nIN ACCEPT -source 10.10.0.22 -p tcp -dport 5432 # replication\nOUT ACCEPT -dest backup_srv -p tcp -dport 8007\n",
+  "firewall/122.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nGROUP db\nOUT ACCEPT -dest 10.10.0.21 -p tcp -dport 5432 # replication\n",
+  "firewall/130.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nIN Ping(ACCEPT)\nIN DNS(ACCEPT) -source 10.10.0.0/24\nOUT DNS(ACCEPT)\nIN ACCEPT -source +monitoring -p tcp -dport 9100\n",
+  "firewall/150.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nIN ACCEPT -source admin_net -p tcp -dport 9090 # Prometheus UI\nOUT ACCEPT -dest 10.10.0.0/24 -p tcp -dport 9100,9187 # scrape\nOUT ACCEPT -dest 10.10.0.10 -p tcp -dport 8404\n",
+  "firewall/160.fw": "[OPTIONS]\nenable: 0\n\n[RULES]\nIN ACCEPT # wide open for testing\n",
+  "firewall/170.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nIN RDP(ACCEPT) -source vpn_users\nIN ACCEPT -source +frontends -p tcp -dport 1433\n",
+  "firewall/cluster.fw": "[OPTIONS]\nenable: 1\npolicy_in: DROP\n\n[ALIASES]\nadmin_net 192.168.10.0/24 # admin workstations\nvpn_users 172.16.0.0/16 # WireGuard VPN\nbackup_srv 10.20.0.5 # Proxmox Backup Server\n\n[IPSET monitoring] # Prometheus + Zabbix\n10.10.0.50\n10.10.0.51\n\n[IPSET dbservers]\n10.10.0.21\n10.10.0.22\n\n[IPSET frontends]\n10.10.0.11\n10.10.0.12\n\n[RULES]\nIN SSH(ACCEPT) -source admin_net -log nolog # admin SSH\nIN ACCEPT -source vpn_users -p tcp -dport 8006 # Proxmox web UI\nIN ACCEPT -source +monitoring -p tcp -dport 9100 # node_exporter\nIN ACCEPT -source backup_srv -p tcp -dport 8007\nIN Ping(ACCEPT) -source admin_net\nIN DROP -p tcp -dport 22 -log warning\n|IN ACCEPT -p tcp -dport 3128 # legacy proxy\n\n[group web] # web servers\nIN HTTP(ACCEPT)\nIN HTTPS(ACCEPT)\nIN ACCEPT -source +monitoring -p tcp -dport 9100\n\n[group db] # databases\nIN PostgreSQL(ACCEPT) -source +frontends\nIN ACCEPT -source +monitoring -p tcp -dport 9187\nIN REJECT -p tcp -dport 3306\n",
+  "nodes/pve1/host.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nIN Ceph(ACCEPT) -source 10.30.0.0/24 # Ceph network\nIN ACCEPT -source 10.30.0.0/24 -p udp -dport 5405:5412 # corosync\n",
+  "nodes/pve2/host.fw": "[OPTIONS]\nenable: 1\n\n[RULES]\nIN ACCEPT -source 10.30.0.0/24 -p udp -dport 5405:5412 # corosync\n",
+  "sdn/vnets.cfg": "vnet: vnetprod\n\tzone prod\n\talias Production\n",
+  "sdn/subnets.cfg": "subnet: prod-10.10.0.0-24\n\tvnet vnetprod\n\tgateway 10.10.0.1\n"
+ },
+ "guests": {
+  "101": {
+   "node": "pve1",
+   "type": "qemu",
+   "conf": "name: web01\nnet0: virtio=BC:24:11:00:00:101,bridge=vnetprod,firewall=1\nipconfig0: ip=10.10.0.11/24,gw=10.10.0.1"
+  },
+  "160": {
+   "node": "pve1",
+   "type": "qemu",
+   "conf": "name: sandbox\nnet0: virtio=BC:24:11:00:00:160,bridge=vnetprod,firewall=1\nipconfig0: ip=dhcp,gw=10.10.0.1"
+  },
+  "180": {
+   "node": "pve1",
+   "type": "qemu",
+   "conf": "name: jump-host\nnet0: virtio=BC:24:11:00:00:180,bridge=vnetprod,firewall=1\nipconfig0: ip=10.10.0.80/24,gw=10.10.0.1"
+  },
+  "102": {
+   "node": "pve2",
+   "type": "qemu",
+   "conf": "name: web02\nnet0: virtio=BC:24:11:00:00:102,bridge=vnetprod,firewall=1\nipconfig0: ip=10.10.0.12/24,gw=10.10.0.1"
+  },
+  "150": {
+   "node": "pve2",
+   "type": "qemu",
+   "conf": "name: prometheus\nnet0: virtio=BC:24:11:00:00:150,bridge=vnetprod,firewall=1\nipconfig0: ip=10.10.0.50/24,gw=10.10.0.1"
+  },
+  "170": {
+   "node": "pve2",
+   "type": "qemu",
+   "conf": "name: legacy-erp\nnet0: virtio=BC:24:11:00:00:170,bridge=vnetprod,firewall=0\nipconfig0: ip=10.10.0.70/24,gw=10.10.0.1"
+  },
+  "110": {
+   "node": "pve1",
+   "type": "lxc",
+   "conf": "hostname: haproxy\nnet0: name=eth0,bridge=vnetprod,firewall=1,hwaddr=BC:24:11:00:01:110,ip=10.10.0.10/24,gw=10.10.0.1,type=veth"
+  },
+  "121": {
+   "node": "pve1",
+   "type": "lxc",
+   "conf": "hostname: pg-primary\nnet0: name=eth0,bridge=vnetprod,firewall=1,hwaddr=BC:24:11:00:01:121,ip=10.10.0.21/24,gw=10.10.0.1,type=veth"
+  },
+  "122": {
+   "node": "pve2",
+   "type": "lxc",
+   "conf": "hostname: pg-replica\nnet0: name=eth0,bridge=vnetprod,firewall=1,hwaddr=BC:24:11:00:01:122,ip=10.10.0.22/24,gw=10.10.0.1,type=veth"
+  },
+  "130": {
+   "node": "pve2",
+   "type": "lxc",
+   "conf": "hostname: dns01\nnet0: name=eth0,bridge=vnetprod,firewall=1,hwaddr=BC:24:11:00:01:130,ip=10.10.0.2/24,gw=10.10.0.1,type=veth"
+  }
+ },
+ "live": {
+  "resources": [
+   {
+    "vmid": 101,
+    "name": "",
+    "node": "pve1",
+    "type": "qemu",
+    "status": "running"
+   },
+   {
+    "vmid": 160,
+    "name": "",
+    "node": "pve1",
+    "type": "qemu",
+    "status": "stopped"
+   },
+   {
+    "vmid": 180,
+    "name": "",
+    "node": "pve1",
+    "type": "qemu",
+    "status": "running"
+   },
+   {
+    "vmid": 102,
+    "name": "",
+    "node": "pve2",
+    "type": "qemu",
+    "status": "running"
+   },
+   {
+    "vmid": 150,
+    "name": "",
+    "node": "pve2",
+    "type": "qemu",
+    "status": "running"
+   },
+   {
+    "vmid": 170,
+    "name": "",
+    "node": "pve2",
+    "type": "qemu",
+    "status": "running"
+   },
+   {
+    "vmid": 110,
+    "name": "",
+    "node": "pve1",
+    "type": "lxc",
+    "status": "running"
+   },
+   {
+    "vmid": 121,
+    "name": "",
+    "node": "pve1",
+    "type": "lxc",
+    "status": "running"
+   },
+   {
+    "vmid": 122,
+    "name": "",
+    "node": "pve2",
+    "type": "lxc",
+    "status": "running"
+   },
+   {
+    "vmid": 130,
+    "name": "",
+    "node": "pve2",
+    "type": "lxc",
+    "status": "running"
+   }
+  ],
+  "ips": {},
+  "nodeIps": {}
+ }
+}

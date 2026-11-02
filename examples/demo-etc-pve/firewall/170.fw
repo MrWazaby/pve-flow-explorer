@@ -1,0 +1,6 @@
+[OPTIONS]
+enable: 1
+
+[RULES]
+IN RDP(ACCEPT) -source vpn_users
+IN ACCEPT -source +frontends -p tcp -dport 1433

@@ -1,0 +1,6 @@
+[OPTIONS]
+enable: 1
+
+[RULES]
+IN Ceph(ACCEPT) -source 10.30.0.0/24 # Ceph network
+IN ACCEPT -source 10.30.0.0/24 -p udp -dport 5405:5412 # corosync

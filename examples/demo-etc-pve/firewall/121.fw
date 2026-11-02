@@ -1,0 +1,7 @@
+[OPTIONS]
+enable: 1
+
+[RULES]
+GROUP db
+IN ACCEPT -source 10.10.0.22 -p tcp -dport 5432 # replication
+OUT ACCEPT -dest backup_srv -p tcp -dport 8007

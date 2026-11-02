@@ -1,0 +1,7 @@
+[OPTIONS]
+enable: 1
+
+[RULES]
+IN ACCEPT -source admin_net -p tcp -dport 9090 # Prometheus UI
+OUT ACCEPT -dest 10.10.0.0/24 -p tcp -dport 9100,9187 # scrape
+OUT ACCEPT -dest 10.10.0.10 -p tcp -dport 8404

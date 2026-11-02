@@ -1,0 +1,5 @@
+[OPTIONS]
+enable: 0
+
+[RULES]
+IN ACCEPT # wide open for testing

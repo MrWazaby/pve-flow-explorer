@@ -1,0 +1,9 @@
+[OPTIONS]
+enable: 1
+
+[RULES]
+IN Ping(ACCEPT) -source 10.10.0.0/24
+GROUP web -i net0
+OUT ACCEPT -dest +dbservers -p tcp -dport 5432
+OUT DNS(ACCEPT) -dest 10.10.0.2
+|IN SSH(ACCEPT) # debug
