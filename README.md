@@ -1,9 +1,9 @@
-# pxe-fw-audit
+# PVE Flow Explorer
 
 Audit the **Proxmox VE firewall** of a cluster as a service map, in the spirit of Cilium's Hubble UI.
 
 - **`pve_fw_export.py`** runs on a PVE node and exports the raw firewall configuration as a JSON bundle.
-- **PVE Flow Explorer**, a single-page web app at **https://pxe-fw-audit.w00tw00t.me**, imports that bundle and lets you explore and filter every flow.
+- **The web app**, a single page at **https://pve-flow-explorer.w00tw00t.me**, imports that bundle and lets you explore and filter every flow.
 
 ![PVE Flow Explorer](docs/screenshot.png)
 
@@ -16,17 +16,17 @@ The web app is static. The bundle is parsed and resolved **in your browser** and
 On any node of the cluster (as root):
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/mrwazaby/pxe-fw-audit/main/pve_fw_export.py
-python3 pve_fw_export.py --live
+curl -fsSLO https://raw.githubusercontent.com/mrwazaby/pve-flow-explorer/main/pve_fw_export.py
+python3 pve_fw_export.py
 # Bundle written: /root/pve-fw-<cluster>-<date>.json
 ```
 
-Then open https://pxe-fw-audit.w00tw00t.me and click **Import bundle…**. The import dialog repeats these steps, with copy buttons, and lets you choose the file, drop it, or paste its JSON content into a text box.
+Then open https://pve-flow-explorer.w00tw00t.me and click **Import bundle…**. The import dialog repeats these steps, with copy buttons, and lets you choose the file, drop it, or paste its JSON content into a text box.
 
 To paste instead of copying the file around, print the bundle and copy it from your terminal:
 
 ```bash
-python3 pve_fw_export.py --live -o -
+python3 pve_fw_export.py -o -
 ```
 
 The paste box tolerates the command line and shell prompt around the JSON. If your terminal hard-wraps long lines when copying, import the file instead.
@@ -40,17 +40,16 @@ Python 3.6+ with the standard library only. Nothing to install.
 The extractor does not interpret anything. It copies the configuration files as they are, so the bundle stays a faithful snapshot and all the logic lives in one place (the web app).
 
 ```text
-usage: pve_fw_export.py [--pve-dir DIR] [-o FILE] [--live]
+usage: pve_fw_export.py [--pve-dir DIR] [-o FILE]
 
   --pve-dir DIR   PVE config root (default: /etc/pve). Use it on an offline copy.
   -o FILE         output file, '-' for stdout (default: ./pve-fw-<cluster>-<date>.json)
-  --live          add power state and real IP addresses via pvesh / qemu-guest-agent
 ```
 
 To run it from your workstation without copying the script to the node, pipe it through SSH:
 
 ```bash
-ssh root@pve1 python3 - --live -o - < pve_fw_export.py > pve-fw-export.json
+ssh root@pve1 python3 - -o - < pve_fw_export.py > pve-fw-export.json
 ```
 
 ### What goes into the bundle
@@ -60,16 +59,16 @@ ssh root@pve1 python3 - --live -o - < pve_fw_export.py > pve-fw-export.json
 | `files`  | Raw text of `firewall/cluster.fw`, `firewall/<vmid>.fw`, `nodes/<node>/host.fw`, `sdn/firewall/<vnet>.fw`, `sdn/vnets.cfg`, `sdn/subnets.cfg`, `sdn/zones.cfg` |
 | `guests` | For each VM/CT: node, type and only these lines of its `.conf`: `name`, `hostname`, `net*`, `ipconfig*`, `tags`, `template`. Snapshot sections are dropped. |
 | `nodes`  | Node names |
-| `live`   | With `--live` only: VM/CT status, IPs reported by the QEMU guest agent or LXC interfaces, node IPs |
+| `live`   | VM/CT status, IPs reported by the QEMU guest agent or LXC interfaces, node IPs. Collected with `pvesh` when reading `/etc/pve` on a node; left empty with `--pve-dir` or when `pvesh` is missing. |
 | `meta`   | Cluster name, export host, timestamp, `pveversion` |
 
 **Not exported:** cloud-init passwords (`cipassword`), SSH keys, descriptions, disks, storage, users, tokens and anything else in `/etc/pve`.
 
 The bundle still describes your network layout and firewall policy, so handle it like any other sensitive config file. `.gitignore` excludes `pve-fw-*.json` for that reason.
 
-### Why `--live`?
+### Why the live data?
 
-The firewall rules reference IP addresses, while VM configs only contain IPs when they are set statically (LXC `ip=` or cloud-init `ipconfigN`). With `--live`, IPs reported by the guest agent are added too, so a rule such as `-source 10.10.0.21` is shown as a flow from `pg-primary` instead of a bare address.
+The firewall rules reference IP addresses, while VM configs only contain IPs when they are set statically (LXC `ip=` or cloud-init `ipconfigN`). The IPs reported by the guest agent are added too, so a rule such as `-source 10.10.0.21` is shown as a flow from `pg-primary` instead of a bare address.
 
 ---
 
@@ -140,7 +139,7 @@ The overview lists configuration issues found while resolving the bundle:
   - `sdn/firewall/<vnet>.fw` rules target the VNet (`FORWARD`).
 - **Direction**: for `IN` rules, a missing `-dest` means the target. For `OUT` rules, a missing `-source` means the target. A missing address means `any`.
 - **Aliases and IPSets** are resolved with PVE's lookup order: guest-local first, then datacenter. The `dc/` and `guest/` prefixes are supported, as are `!` negation and nested aliases in IPSets.
-- **IP → guest**: when an address or a single-member IPSet is a host address belonging to a guest (static IP, cloud-init or `--live`), the flow is drawn to or from that guest's card. A CIDR that matches an SDN subnet is shown as its VNet.
+- **IP → guest**: when an address or a single-member IPSet is a host address belonging to a guest (static IP, cloud-init or guest agent), the flow is drawn to or from that guest's card. A CIDR that matches an SDN subnet is shown as its VNet.
 - **Security groups** (`GROUP name -i net0`) are expanded inline. Each expanded rule keeps a reference to the line that called the group.
 - **Macros** (`SSH(ACCEPT)`, `PostgreSQL(ACCEPT)`, `Ceph(ACCEPT)`…) are mapped to protocols and ports by a built-in table of the common PVE macros.
 - **State**: a rule is *enforced* only if it is enabled, its firewall file has `enable: 1`, the datacenter firewall is enabled and, for guests, at least one NIC has `firewall=1`.
@@ -190,7 +189,7 @@ The only external resource is the IBM Plex font from Google Fonts, with system f
 `.github/workflows/pages.yml` publishes `web/index.html` and `web/CNAME` on every push to `main`. One-time setup:
 
 1. In the repository, go to **Settings → Pages** and set **Source** to **GitHub Actions**.
-2. At your DNS provider, add `pxe-fw-audit.w00tw00t.me CNAME mrwazaby.github.io.`
+2. At your DNS provider, add `pve-flow-explorer.w00tw00t.me CNAME mrwazaby.github.io.`
 3. Once the certificate is issued, tick **Enforce HTTPS** in **Settings → Pages**.
 
 Any other static host works too: serve `web/index.html` as the index page.

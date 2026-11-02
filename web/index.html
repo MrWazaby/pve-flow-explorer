@@ -246,7 +246,7 @@ textarea.paste.bad{border-color:var(--deny)}
       <button class="btn primary" id="btnImport" type="button">Import bundle…</button>
       <input type="file" id="file" accept=".json,.fw,application/json" multiple hidden>
       <button class="btn" id="btnDemo" type="button">Load sample</button>
-      <a class="btn" href="https://github.com/mrwazaby/pxe-fw-audit" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn" href="https://github.com/mrwazaby/pve-flow-explorer" target="_blank" rel="noopener">GitHub</a>
     </div>
   </header>
 
@@ -330,23 +330,23 @@ textarea.paste.bad{border-color:var(--deny)}
       <div>
         <h3>Export the configuration on a PVE node</h3>
         <p>Run this on any node of the cluster, as root. It only needs Python 3.6+, nothing to install.</p>
-        <div class="code"><pre id="cmdExport">curl -fsSLO https://raw.githubusercontent.com/mrwazaby/pxe-fw-audit/main/pve_fw_export.py
-python3 pve_fw_export.py --live</pre><button type="button" class="btn small cp" data-copy="cmdExport">Copy</button></div>
-        <p>It writes <code>pve-fw-&lt;cluster&gt;-&lt;date&gt;.json</code> in the current directory. <code>--live</code> adds power states and the IPs reported by the QEMU guest agent, so rules written with bare IPs point to the right VM. Copy the file to your computer, for example with <code>scp root@pve1:pve-fw-*.json .</code></p>
+        <div class="code"><pre id="cmdExport">curl -fsSLO https://raw.githubusercontent.com/mrwazaby/pve-flow-explorer/main/pve_fw_export.py
+python3 pve_fw_export.py</pre><button type="button" class="btn small cp" data-copy="cmdExport">Copy</button></div>
+        <p>It writes <code>pve-fw-&lt;cluster&gt;-&lt;date&gt;.json</code> in the current directory, with power states and the IPs reported by the QEMU guest agent, so rules written with bare IPs point to the right VM. Copy the file to your computer, for example with <code>scp root@pve1:pve-fw-*.json .</code></p>
         <details>
           <summary>Other ways to get the export</summary>
           <dl>
             <dt>Print the JSON, then copy it from the terminal and paste it below</dt>
-            <dd><div class="code"><pre id="cmdStdout">python3 pve_fw_export.py --live -o -</pre><button type="button" class="btn small cp" data-copy="cmdStdout">Copy</button></div></dd>
+            <dd><div class="code"><pre id="cmdStdout">python3 pve_fw_export.py -o -</pre><button type="button" class="btn small cp" data-copy="cmdStdout">Copy</button></div></dd>
             <dt>Run it from your computer, without copying the script to the node</dt>
-            <dd><div class="code"><pre id="cmdSsh">ssh root@pve1 python3 - --live -o - &lt; pve_fw_export.py &gt; pve-fw-export.json</pre><button type="button" class="btn small cp" data-copy="cmdSsh">Copy</button></div></dd>
+            <dd><div class="code"><pre id="cmdSsh">ssh root@pve1 python3 - -o - &lt; pve_fw_export.py &gt; pve-fw-export.json</pre><button type="button" class="btn small cp" data-copy="cmdSsh">Copy</button></div></dd>
             <dt>Read an offline copy of <code>/etc/pve</code></dt>
             <dd><div class="code"><pre id="cmdOffline">python3 pve_fw_export.py --pve-dir ./etc-pve</pre><button type="button" class="btn small cp" data-copy="cmdOffline">Copy</button></div></dd>
             <dt>Only have <code>.fw</code> files?</dt>
             <dd>Drop them below. The rules are shown, but IP addresses are not mapped to guests.</dd>
           </dl>
         </details>
-        <p class="fine">The bundle holds the firewall and SDN files, plus the <code>name</code>, <code>net*</code>, <code>ipconfig*</code> and <code>tags</code> lines of each guest config. No passwords, SSH keys, disks or users. <a href="https://github.com/mrwazaby/pxe-fw-audit#what-goes-into-the-bundle" target="_blank" rel="noopener">What goes into the bundle</a></p>
+        <p class="fine">The bundle holds the firewall and SDN files, plus the <code>name</code>, <code>net*</code>, <code>ipconfig*</code> and <code>tags</code> lines of each guest config. No passwords, SSH keys, disks or users. <a href="https://github.com/mrwazaby/pve-flow-explorer#what-goes-into-the-bundle" target="_blank" rel="noopener">What goes into the bundle</a></p>
       </div>
     </section>
     <section class="step">

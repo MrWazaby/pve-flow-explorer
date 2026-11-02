@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 pve_fw_export.py — export the raw Proxmox VE firewall configuration as a JSON
-bundle for PVE Flow Explorer (https://pxe-fw-audit.w00tw00t.me).
+bundle for PVE Flow Explorer (https://pve-flow-explorer.w00tw00t.me).
 
 The script does not interpret anything: it only collects files as they are.
 All resolution (aliases, IPSets, security groups, macros, IP -> guest mapping)
@@ -15,20 +15,20 @@ Bundle content:
   guests  for each VM/CT: node, type and the relevant lines of its .conf
           (name, hostname, net*, ipconfig*, tags only: no cloud-init passwords,
           SSH keys or descriptions)
-  live    (--live) power state and real IP addresses via pvesh / qemu-guest-agent
+  live    power state and real IP addresses via pvesh / qemu-guest-agent
+          (only when reading /etc/pve on a node where pvesh is available)
 
 Usage:
   python3 pve_fw_export.py                       # writes ./pve-fw-<cluster>-<date>.json
-  python3 pve_fw_export.py --live                # + IPs reported by the guest agent
   python3 pve_fw_export.py --pve-dir ./etc-pve -o bundle.json
   python3 pve_fw_export.py -o -                  # print the JSON (to copy and paste it into the web app)
   python3 pve_fw_export.py -o - | gzip > bundle.json.gz
-  ssh root@pve1 python3 - --live -o - < pve_fw_export.py > pve-fw-export.json
+  ssh root@pve1 python3 - -o - < pve_fw_export.py > pve-fw-export.json
 
 Python 3.6+, standard library only. Run it on any node of the cluster
 (as root, or as a member of the www-data group to read /etc/pve).
 
-Project: https://github.com/mrwazaby/pxe-fw-audit
+Project: https://github.com/mrwazaby/pve-flow-explorer
 """
 import argparse
 import datetime
@@ -125,7 +125,7 @@ def usable_ip(ip):
 def collect_live():
     """Real guest IPs (guest agent / LXC interfaces) and node IPs."""
     if not shutil.which("pvesh"):
-        warn("pvesh not found: --live ignored")
+        print("[i] pvesh not found: power states and guest-agent IPs skipped", file=sys.stderr)
         return None
     live = {"resources": [], "ips": {}, "nodeIps": {}}
     for r in pvesh("/cluster/resources") or []:
@@ -164,8 +164,6 @@ def main():
     ap = argparse.ArgumentParser(description="Raw Proxmox VE firewall export (JSON bundle for PVE Flow Explorer)")
     ap.add_argument("--pve-dir", default="/etc/pve", help="PVE config root (default: /etc/pve)")
     ap.add_argument("-o", "--output", help="output file ('-' for stdout)")
-    ap.add_argument("--live", action="store_true",
-                    help="add power state and real IPs via pvesh / qemu-guest-agent")
     args = ap.parse_args()
 
     if not os.path.isdir(args.pve_dir):
@@ -190,7 +188,8 @@ def main():
         "meta": {"cluster": name, "host": socket.gethostname(), "generated": now.isoformat(),
                  "pveVersion": pve_version, "source": os.path.abspath(args.pve_dir)},
         "nodes": nodes, "files": files, "guests": guests,
-        "live": collect_live() if args.live else None,
+        # pvesh queries the local cluster, so it only matches a live /etc/pve
+        "live": collect_live() if os.path.realpath(args.pve_dir) == "/etc/pve" else None,
     }
 
     out = args.output or "pve-fw-%s-%s.json" % (re.sub(r"[^\w.-]", "_", name), now.strftime("%Y%m%d-%H%M"))
@@ -203,7 +202,7 @@ def main():
         n_fw = sum(1 for k in files if k.endswith(".fw"))
         print("Bundle written: %s (%d firewall files, %d guests, %d nodes)" % (
             os.path.abspath(out), n_fw, len(guests), len(nodes)))
-        print("Open https://pxe-fw-audit.w00tw00t.me and import it.")
+        print("Open https://pve-flow-explorer.w00tw00t.me and import it.")
 
 
 if __name__ == "__main__":
