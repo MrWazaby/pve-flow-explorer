@@ -332,7 +332,7 @@ textarea.paste.bad{border-color:var(--deny)}
         <p>Run this on any node of the cluster, as root. It only needs Python 3.6+, nothing to install.</p>
         <div class="code"><pre id="cmdExport">curl -fsSLO https://raw.githubusercontent.com/mrwazaby/pve-flow-explorer/main/pve_fw_export.py
 python3 pve_fw_export.py</pre><button type="button" class="btn small cp" data-copy="cmdExport">Copy</button></div>
-        <p>It writes <code>pve-fw-&lt;cluster&gt;-&lt;date&gt;.json</code> in the current directory, with power states and the IPs reported by the QEMU guest agent, so rules written with bare IPs point to the right VM. Copy the file to your computer, for example with <code>scp root@pve1:pve-fw-*.json .</code></p>
+        <p>It writes <code>pve-fw-&lt;cluster&gt;-&lt;date&gt;.json</code> in the current directory, with power states and the IPs reported by the QEMU guest agent, so rules written with bare IPs point to the right VM. Asking the guest agents takes a few seconds, up to a minute on a large cluster. Copy the file to your computer, for example with <code>scp root@pve1:pve-fw-*.json .</code></p>
         <details>
           <summary>Other ways to get the export</summary>
           <dl>

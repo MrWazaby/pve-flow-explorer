@@ -59,7 +59,7 @@ ssh root@pve1 python3 - -o - < pve_fw_export.py > pve-fw-export.json
 | `files`  | Raw text of `firewall/cluster.fw`, `firewall/<vmid>.fw`, `nodes/<node>/host.fw`, `sdn/firewall/<vnet>.fw`, `sdn/vnets.cfg`, `sdn/subnets.cfg`, `sdn/zones.cfg` |
 | `guests` | For each VM/CT: node, type and only these lines of its `.conf`: `name`, `hostname`, `net*`, `ipconfig*`, `tags`, `template`. Snapshot sections are dropped. |
 | `nodes`  | Node names |
-| `live`   | VM/CT status, IPs reported by the QEMU guest agent or LXC interfaces, node IPs. Collected with `pvesh` when reading `/etc/pve` on a node; left empty with `--pve-dir` or when `pvesh` is missing. |
+| `live`   | VM/CT status, IPs reported by the QEMU guest agent or LXC interfaces, node IPs. Collected with `pvesh` when reading `/etc/pve` on a node; `null` with `--pve-dir` or when `pvesh` is missing. |
 | `meta`   | Cluster name, export host, timestamp, `pveversion` |
 
 **Not exported:** cloud-init passwords (`cipassword`), SSH keys, descriptions, disks, storage, users, tokens and anything else in `/etc/pve`.
@@ -69,6 +69,14 @@ The bundle still describes your network layout and firewall policy, so handle it
 ### Why the live data?
 
 The firewall rules reference IP addresses, while VM configs only contain IPs when they are set statically (LXC `ip=` or cloud-init `ipconfigN`). The IPs reported by the guest agent are added too, so a rule such as `-source 10.10.0.21` is shown as a flow from `pg-primary` instead of a bare address.
+
+Each `pvesh` call starts a Perl process, and calls for another node go through SSH, so this is the slow part of the export. To keep it bounded:
+
+- only running guests are asked, and only VMs whose config has the guest agent enabled (`agent: 1`);
+- up to 6 calls run in parallel, each one is killed after 15 s (a guest agent that does not answer), and the whole step stops after 60 s;
+- guests that did not answer in time keep the IPs from their config, and the exporter says how many calls were answered.
+
+A small cluster takes a few seconds.
 
 ---
 
